@@ -87,7 +87,9 @@ describe("entity types", () => {
       id: userId("user_1"),
       name: "Ada",
       email: "ada@example.com",
+      emailVerified: false,
       avatarUrl: null,
+      createdAt: new Date(at),
     };
     const team: Team = { id: teamId("team_1"), key: "ENG", name: "Engineering" };
     const member: TeamMember = { teamId: team.id, userId: user.id, role: "admin" };

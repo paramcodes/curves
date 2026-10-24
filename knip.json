@@ -5,18 +5,16 @@
       "entry": "src/entry.ts"
     },
     "packages/api": {
-      "entry": "src/entry.ts"
+      "entry": ["src/entry.ts", "src/auth/*.ts"]
     },
     "packages/db": {
       "entry": [
         "src/entry.ts",
         "src/schema/*.ts",
-        "src/test-db.ts",
         "src/repos/*.ts",
         "src/contracts/*.ts",
         "src/jobs/*.ts",
         "src/seed/*.ts",
-        "src/db-reset.ts",
         "src/boot-wiring.ts"
       ]
     },

@@ -15,6 +15,13 @@
       "when": 1792869148728,
       "tag": "0001_clever_kat_farrell",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792871976821,
+      "tag": "0002_dapper_the_renegades",
+      "breakpoints": true
     }
   ]
 }

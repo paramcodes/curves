@@ -21,5 +21,9 @@
   "dependencies": {
     "@curves/domain": "workspace:*",
     "drizzle-orm": "^0.45.4"
+  },
+  "exports": {
+    "./test-db": "./src/test-db.ts",
+    "./schema/*": "./src/schema/*.ts"
   }
 }

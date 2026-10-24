@@ -5,6 +5,7 @@ import { getTableName, sql, Table, type Table as TableType } from "drizzle-orm";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import type { Db } from "./repos/issue.repo";
+import * as accountsMod from "./schema/accounts";
 import * as activitiesMod from "./schema/activities";
 import * as commentsMod from "./schema/comments";
 import * as cycleIssuesMod from "./schema/cycle_issues";
@@ -18,10 +19,12 @@ import * as notificationsMod from "./schema/notifications";
 import * as projectIssuesMod from "./schema/project_issues";
 import * as projectsMod from "./schema/projects";
 import * as reactionsMod from "./schema/reactions";
+import * as sessionsMod from "./schema/sessions";
 import * as statesMod from "./schema/states";
 import * as teamMembersMod from "./schema/team_members";
 import * as teamsMod from "./schema/teams";
 import * as usersMod from "./schema/users";
+import * as verificationsMod from "./schema/verifications";
 import * as viewsMod from "./schema/views";
 
 const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "migrations");
@@ -34,6 +37,7 @@ const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "migratio
  * failure instead of silently leaving rows behind after a truncate.
  */
 const schemaModules = [
+  accountsMod,
   activitiesMod,
   commentsMod,
   cycleIssuesMod,
@@ -50,9 +54,20 @@ const schemaModules = [
   statesMod,
   teamMembersMod,
   teamsMod,
+  sessionsMod,
   usersMod,
+  verificationsMod,
   viewsMod,
 ] as const;
+
+/**
+ * The drizzle pglite instance type AS THIS PACKAGE resolves drizzle-orm.
+ * api must type its `createAuth` db param with THIS (not its own drizzle
+ * import): pnpm resolves api's drizzle-orm separately from db's (different
+ * peer hashes), and the two copies' PgliteDatabase types are nominal —
+ * structurally incompatible — across the boundary.
+ */
+export type DbInstance = PgliteDatabase;
 
 /** One schema module per table today — the count the guard pins. */
 export const EXPECTED_TABLE_COUNT = schemaModules.length;
@@ -94,9 +109,9 @@ export const createTestDb = async () => {
  * BEFORE truncating — a new table cannot be silently missed.
  */
 export const resetDb = async (db: Db): Promise<void> => {
-  if (allTables.length !== 18) {
+  if (allTables.length !== 21) {
     throw new Error(
-      `resetDb: derived ${allTables.length} tables but 18 are pinned — a schema ` +
+      `resetDb: derived ${allTables.length} tables but 21 are pinned — a schema ` +
         "table was added/removed without updating test-db.ts's schemaModules list",
     );
   }
