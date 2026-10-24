@@ -22,6 +22,7 @@ import { issues } from "../schema/issues";
 import { filterToConditions } from "./filter-sql";
 import { createValues, type IssueRow, toDomain } from "./issue.mapper";
 import { type ListQuery, type ListResult, parseCursor, serializeCursor } from "./list";
+import { isUniqueViolation } from "./pg-errors";
 
 /** Driver-agnostic drizzle handle — pglite in tests, node-postgres in prod. */
 export type Db = PgDatabase<PgQueryResultHKT>;
@@ -81,20 +82,6 @@ export interface IssueRepo {
   relations(id: IssueId): Promise<IssueRelation[]>;
   nextNumber(teamId: TeamId): Promise<number>;
 }
-
-const PG_UNIQUE_VIOLATION = "23505";
-
-/** Walk the cause chain (drizzle wraps driver errors) looking for 23505. */
-const isUniqueViolation = (err: unknown): boolean => {
-  let cause: unknown = err;
-  for (let depth = 0; depth < 5 && typeof cause === "object" && cause !== null; depth++) {
-    if ((cause as { code?: unknown }).code === PG_UNIQUE_VIOLATION) {
-      return true;
-    }
-    cause = (cause as { cause?: unknown }).cause;
-  }
-  return false;
-};
 
 interface SortSpec {
   /** ORDER BY / keyset comparison expression. */
@@ -195,31 +182,35 @@ const patchToSet = (patch: IssuePatch): Partial<typeof issues.$inferInsert> => {
   return set;
 };
 
-export const createIssueRepo = (db: Db): IssueRepo => {
-  /** Batched label lookup for a page of rows — no per-row queries (N+1 guard). */
-  const labelIdsFor = async (ids: IssueId[]): Promise<Map<string, LabelId[]>> => {
-    const map = new Map<string, LabelId[]>();
-    if (ids.length === 0) {
-      return map;
-    }
-    const rows = await db
-      .select({ issueId: issueLabels.issueId, labelId: issueLabels.labelId })
-      .from(issueLabels)
-      .where(inArray(issueLabels.issueId, ids))
-      .orderBy(asc(issueLabels.issueId), asc(issueLabels.labelId));
-    for (const row of rows) {
-      const existing = map.get(row.issueId);
-      if (existing === undefined) {
-        map.set(row.issueId, [row.labelId]);
-      } else {
-        existing.push(row.labelId);
-      }
-    }
+/**
+ * Batched label lookup for a set of issue rows — no per-row queries (N+1
+ * guard). Shared with jobs/rollover.job.ts, which loads full domain Issues
+ * for the pure planner; labels come back id-sorted (deterministic).
+ */
+export const labelIdsFor = async (db: Db, ids: IssueId[]): Promise<Map<string, LabelId[]>> => {
+  const map = new Map<string, LabelId[]>();
+  if (ids.length === 0) {
     return map;
-  };
+  }
+  const rows = await db
+    .select({ issueId: issueLabels.issueId, labelId: issueLabels.labelId })
+    .from(issueLabels)
+    .where(inArray(issueLabels.issueId, ids))
+    .orderBy(asc(issueLabels.issueId), asc(issueLabels.labelId));
+  for (const row of rows) {
+    const existing = map.get(row.issueId);
+    if (existing === undefined) {
+      map.set(row.issueId, [row.labelId]);
+    } else {
+      existing.push(row.labelId);
+    }
+  }
+  return map;
+};
 
+export const createIssueRepo = (db: Db): IssueRepo => {
   const withLabels = async (row: IssueRow): Promise<Issue> => {
-    const labels = await labelIdsFor([row.id]);
+    const labels = await labelIdsFor(db, [row.id]);
     return toDomain(row, labels.get(row.id) ?? []);
   };
 
@@ -333,7 +324,10 @@ export const createIssueRepo = (db: Db): IssueRepo => {
         .limit(limit + 1);
 
       const page = rows.slice(0, limit);
-      const labels = await labelIdsFor(page.map((r) => r.id));
+      const labels = await labelIdsFor(
+        db,
+        page.map((r) => r.id),
+      );
       const items = page.map((row) => toDomain(row, labels.get(row.id) ?? []));
 
       const last = page[page.length - 1];

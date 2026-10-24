@@ -13,7 +13,8 @@
         "src/schema/*.ts",
         "src/test-db.ts",
         "src/repos/*.ts",
-        "src/contracts/*.ts"
+        "src/contracts/*.ts",
+        "src/jobs/*.ts"
       ]
     },
     "packages/domain": {
