@@ -1,5 +1,5 @@
 import type { LabelId, TeamId } from "@curves/domain/core/ids";
-import { index, pgTable, text } from "drizzle-orm/pg-core";
+import { index, pgTable, text, unique } from "drizzle-orm/pg-core";
 import { teams } from "./teams";
 
 export const labels = pgTable(
@@ -13,5 +13,8 @@ export const labels = pgTable(
     name: text().notNull(),
     color: text().notNull(),
   },
-  (t) => [index("labels_team_idx").on(t.teamId)],
+  (t) => [
+    index("labels_team_idx").on(t.teamId),
+    unique("labels_team_name_unique").on(t.teamId, t.name),
+  ],
 );
