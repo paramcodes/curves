@@ -1,7 +1,9 @@
 # Pre-commit is deliberately Biome-only: fast enough to never be worth bypassing.
 # Typecheck, knip, tests, and the boot check run in CI (ADR 0002 — lean guardrails).
-# Biome v2 skips unknown file types via files.ignoreUnknown, so no unmatched-files flag is needed.
+# The glob filters staged files to types Biome processes; a docs-only commit skips the job
+# (Biome exits 1 on "no files processed" otherwise). Unknown types are skipped via files.ignoreUnknown.
 pre-commit:
   jobs:
     - name: biome check
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,css}"
       run: pnpm exec biome check {staged_files}

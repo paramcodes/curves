@@ -1,14 +1,14 @@
 # AGENTS.md — start here
 
-Curves: a Linear clone built agent-first. **Status: planning complete, no code yet.**
+Curves: a Linear clone built agent-first. **Status: Phase 0 complete — scaffold, guardrails, and the verification ladder are live; next: [Phase 1](docs/phases/01-domain-data.md).**
 
 1. Read [PLAN.md](PLAN.md) — master plan: stack, layout, global rules, phase index.
 2. Your work belongs to exactly one phase: `docs/phases/`.
-3. Implementation begins at [docs/phases/00-foundation.md](docs/phases/00-foundation.md). Do not start a phase before the previous one's acceptance criteria pass.
+3. Phase 0 is complete (see its [guard-proofs report](docs/phases/reports/phase-0-guard-proofs.md)). Do not start a phase before the previous one's acceptance criteria pass.
 
 ## Repo contract (summary — PLAN.md is authoritative)
 
-- Verification ladder: `pnpm check` → `pnpm verify` → `pnpm verify:full` (+ `pnpm test:file <path>`). Commands exist from Phase 0 onward.
+- Verification ladder (all green as of Phase 0, `verify:full` ≈ 6 s): `pnpm check` → `pnpm verify` → `pnpm verify:full` (+ `pnpm test:file <path>`). Pre-commit hook = Biome on staged files only; everything else is CI.
 - Definition of done: ladder green + the touched surface observed running (browser/DB) + docs touched.
 - TypeScript strictest; no `any`; branded IDs; zod only at boundaries; business logic lives in `packages/domain`, never in routers or components.
 - Never edit: applied migrations, CI thresholds.
