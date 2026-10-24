@@ -1,0 +1,21 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["@curves/*", "@curves/**"],
+                "message": "config is a leaf of shared presets only — it must not import workspace packages (PLAN.md dependency direction). Shared code belongs to the package that owns it."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
