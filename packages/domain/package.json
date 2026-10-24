@@ -3,6 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./core/*": "./src/core/*.ts",
+    "./teams/*": "./src/teams/*.ts",
+    "./issues/*": "./src/issues/*.ts",
+    "./projects/*": "./src/projects/*.ts",
+    "./cycles/*": "./src/cycles/*.ts",
+    "./activities/*": "./src/activities/*.ts",
+    "./notifications/*": "./src/notifications/*.ts",
+    "./filters/*": "./src/filters/*.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run"

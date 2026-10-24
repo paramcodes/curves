@@ -10,7 +10,7 @@
   "scripts": {
     "check": "biome check . && turbo run typecheck && knip",
     "verify": "pnpm check && turbo run test",
-    "verify:full": "pnpm verify && node scripts/boot-check.mjs",
+    "verify:full": "pnpm verify && pnpm exec turbo run test:integration && node scripts/boot-check.mjs",
     "test:file": "vitest run",
     "prepare": "lefthook install"
   },
