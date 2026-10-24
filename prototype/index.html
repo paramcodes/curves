@@ -1,0 +1,735 @@
+<!doctype html>
+<!-- PROTOTYPE — disposable, throwaway. Question: "What should Curves look and feel like?" -->
+<!-- Variants: L (landing) + A/B/C (app workspace), switchable via ?variant=L|A|B|C, the floating bar, or ←/→. -->
+<!-- No build, no deps, no persistence. Delete this folder freely. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curves — UI prototype</title>
+<style>
+  /* ============ tokens (oklch, derived tints) ============ */
+  :root{
+    --bg:oklch(16.5% 0.005 270);
+    --panel:oklch(19% 0.006 270);
+    --panel-2:oklch(22% 0.007 270);
+    --border:oklch(100% 0 0 / 8%);
+    --border-2:oklch(100% 0 0 / 14%);
+    --text:oklch(93% 0.003 260);
+    --text-2:oklch(74% 0.012 265);
+    --text-3:oklch(58% 0.012 265);
+    --accent:oklch(56% 0.16 278);
+    --accent-strong:oklch(65% 0.15 278);
+    --accent-soft:oklch(56% 0.16 278 / 16%);
+    --urgent:oklch(65% 0.19 22);
+    --warn:oklch(84% 0.14 95);
+    --good:oklch(70% 0.14 155);
+    --hover:oklch(100% 0 0 / 4%);
+    --row-h:34px;
+    --radius:6px; --radius-lg:10px;
+    --ease-out:cubic-bezier(0.23,1,0.32,1);
+    --ease-in-out:cubic-bezier(0.77,0,0.175,1);
+    --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  }
+
+  /* ============ reset / base ============ */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--text);
+    font:13px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow:hidden;
+  }
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:oklch(100% 0 0 / 12%);border-radius:5px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-track{background:transparent}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input{font:inherit;color:inherit;background:none;border:0;outline:0}
+  svg{display:block;flex:none}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+  .dim{color:var(--text-2)} .dimmer{color:var(--text-3)} .mono{font-variant-numeric:tabular-nums}
+
+  /* ============ shared atoms ============ */
+  .ava{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;color:#fff;flex:none}
+  .pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:4px;background:var(--hover);color:var(--text-2);font-size:11.5px;flex:none}
+  .kbd{display:inline-block;padding:1px 6px;border:1px solid var(--border-2);border-bottom-width:2px;border-radius:4px;font-size:10.5px;color:var(--text-2);background:var(--panel-2)}
+  .row{display:flex;align-items:center;gap:10px;height:var(--row-h);padding-inline:14px;cursor:default;position:relative;border-radius:4px;margin-inline:6px}
+  .row .id{color:var(--text-3);font-size:12px;width:62px;flex:none}
+  .row .title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .when{color:var(--text-3);font-size:11px;flex:none;width:36px;text-align:right}
+  .row.sel{background:var(--accent-soft)}
+  .row.sel::before{content:"";position:absolute;inset-block:6px;inset-inline-start:0;width:2px;border-radius:2px;background:var(--accent)}
+
+  /* motion: only where motion is welcome */
+  @media (hover:hover) and (pointer:fine){
+    .row:hover,.card:hover,.tr:hover,.nav:hover,.icobtn:hover,.pit:hover{background:var(--hover)}
+    .nav:hover{color:var(--text)}
+    .icobtn:hover{color:var(--text)}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .card,.tr,.row,.nav,.icobtn{transition:background-color 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
+  }
+  .press{transition:transform 140ms var(--ease-out)}
+  .press:active{transform:scale(.97)}
+
+  /* ============ variant A : sidebar + list + detail pane ============ */
+  .vA{display:grid;grid-template-columns:224px minmax(0,1fr) 408px;height:100vh}
+  .vA .side{background:var(--panel);border-inline-end:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+  .vA .ws{display:flex;align-items:center;gap:10px;padding:6px 8px 16px}
+  .vA .ws .logo{width:22px;height:22px;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px}
+  .vA .sec{margin-block:16px 6px;padding-inline:10px;font-size:11px;letter-spacing:.05em;color:var(--text-3)}
+  .vA .nav{display:flex;align-items:center;gap:9px;padding:5px 10px;border-radius:var(--radius);color:var(--text-2);cursor:default}
+  .vA .nav.on{background:var(--hover);color:var(--text)}
+  .vA .nav .cnt{margin-inline-start:auto;font-size:11px;color:var(--text-3)}
+  .vA .nav svg{opacity:.75}
+  .vA .main{display:flex;flex-direction:column;min-width:0;position:relative}
+  .vA .head{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 16px;border-block-end:1px solid var(--border)}
+  .vA .head h1{font-size:14px;font-weight:600;letter-spacing:-0.01em}
+  .vA .chip{display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:var(--radius);background:var(--accent-soft);color:var(--accent-strong);font-size:12px;cursor:default}
+  .vA .head .grow{flex:1}
+  .vA .icobtn{width:28px;height:28px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--text-2)}
+  .vA .list{flex:1;overflow-y:auto;padding-block:6px 56px}
+  .vA .grp{display:flex;align-items:center;gap:9px;min-height:40px;padding-inline:16px;color:var(--text-2);font-size:12px;font-weight:600;cursor:default;position:sticky;top:0;background:var(--bg);z-index:1}
+  .vA .grp .n{color:var(--text-3);font-weight:400}
+  .vA .detail{background:var(--panel);border-inline-start:1px solid var(--border);overflow-y:auto;padding:26px 26px 40px}
+  .vA .detail h2{font-size:16px;font-weight:600;line-height:1.4;letter-spacing:-0.01em;margin-block:2px 18px}
+  .vA .desc{color:var(--text-2);font-size:13px;line-height:1.7;margin-block:20px 22px}
+  .vA .prop{display:flex;align-items:center;gap:12px;min-height:34px;font-size:12.5px}
+  .vA .prop .k{width:96px;color:var(--text-3);flex:none}
+  .vA .prop .v{display:flex;align-items:center;gap:7px;cursor:default;padding:3px 8px;margin-inline-start:-8px;border-radius:5px}
+  @media (hover:hover) and (pointer:fine){ .vA .prop .v:hover{background:var(--hover)} }
+  .vA .act{margin-block-start:28px;border-block-start:1px solid var(--border);padding-block-start:16px;font-size:12.5px;color:var(--text-2)}
+  .vA .act .ev{display:flex;gap:10px;padding:8px 0;align-items:flex-start;line-height:1.6}
+  .vA .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;display:flex;gap:16px;color:var(--text-3);font-size:11.5px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:6px 16px}
+
+  /* ============ variant B : icon rail + swimlanes + drawer ============ */
+  .vB{display:grid;grid-template-columns:52px minmax(0,1fr);height:100vh}
+  .vB .rail{background:var(--panel);border-inline-end:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
+  .vB .rail .rb{width:32px;height:32px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--text-2)}
+  .vB .rail .rb.on{background:var(--accent-soft);color:var(--accent-strong)}
+  @media (hover:hover) and (pointer:fine){ .vB .rail .rb:hover{background:var(--hover);color:var(--text)} }
+  .vB .rail .sp{flex:1}
+  .vB .board{display:flex;flex-direction:column;min-width:0}
+  .vB .bhead{display:flex;align-items:center;gap:14px;min-height:54px;padding:8px 18px;border-block-end:1px solid var(--border)}
+  .vB .bhead h1{font-size:14px;font-weight:600;letter-spacing:-0.01em}
+  .vB .cyc{font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:8px}
+  .vB .bar{width:110px;height:4px;border-radius:2px;background:var(--panel-2);overflow:clip}
+  .vB .bar i{display:block;height:100%;width:62%;background:var(--accent)}
+  .vB .lanes{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--border);overflow:hidden}
+  .vB .lane{background:var(--bg);display:flex;flex-direction:column;min-width:0}
+  .vB .lane h3{display:flex;align-items:center;gap:8px;min-height:42px;padding-inline:14px;font-size:12px;color:var(--text-2);font-weight:600;border-block-end:1px solid var(--border)}
+  .vB .lane h3 .n{color:var(--text-3);font-weight:400}
+  .vB .lane .body{flex:1;overflow-y:auto;padding:10px}
+  .vB .card{border:1px solid var(--border);background:var(--panel);border-radius:8px;padding:11px 13px;margin-block-end:8px;cursor:default}
+  .vB .card.sel{border-color:var(--accent);background:var(--accent-soft)}
+  .vB .card .t{display:flex;gap:9px;align-items:flex-start;line-height:1.45}
+  .vB .card .id{color:var(--text-3);font-size:11px;margin-block-end:5px}
+  .vB .card .foot{display:flex;align-items:center;gap:7px;margin-block-start:10px}
+  .vB .drawerwrap{position:fixed;inset:0;pointer-events:none}
+  .vB .scrim{position:absolute;inset:0;background:oklch(0% 0 0 / 45%);opacity:0;transition:opacity 200ms var(--ease-out)}
+  .vB .drawer{position:absolute;inset-block:0;inset-inline-end:0;width:440px;max-width:92vw;background:var(--panel);border-inline-start:1px solid var(--border-2);box-shadow:-24px 0 64px oklch(0% 0 0 / 35%);transform:translateX(100%);transition:transform 280ms var(--ease-drawer);overflow-y:auto;padding:28px 28px 44px;pointer-events:auto}
+  .vB .drawerwrap.open{pointer-events:auto}
+  .vB .drawerwrap.open .scrim{opacity:1}
+  .vB .drawerwrap.open .drawer{transform:none}
+  @media (prefers-reduced-motion:reduce){ .vB .scrim{transition:opacity 80ms linear} .vB .drawer{transition-duration:80ms} }
+
+  /* ============ variant C : command-first table + modal ============ */
+  .vC{display:flex;flex-direction:column;height:100vh;max-width:1100px;margin:0 auto;padding:0 28px}
+  .vC .crumbs{display:flex;gap:8px;align-items:center;padding:18px 2px 8px;color:var(--text-3);font-size:12px}
+  .vC .cmd{display:flex;align-items:center;gap:10px;min-height:44px;border:1px solid var(--border-2);background:var(--panel);border-radius:9px;padding:0 14px;color:var(--text-3);cursor:text;margin:6px 0 16px}
+  @media (hover:hover) and (pointer:fine){ .vC .cmd:hover{border-color:oklch(100% 0 0 / 22%);color:var(--text-2)} }
+  .vC .table{flex:1;overflow-y:auto;padding-block-end:88px}
+  .vC .thr{display:flex;align-items:center;gap:12px;min-height:30px;padding-inline:10px;color:var(--text-3);font-size:11px;border-block-end:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:1}
+  .vC .tr{display:flex;align-items:center;gap:12px;height:var(--row-h);padding-inline:10px;border-radius:5px;cursor:default}
+  .vC .tr.sel{background:var(--accent-soft)}
+  .vC .tr .c-id{width:62px;flex:none;color:var(--text-3);font-size:12px}
+  .vC .tr .c-pr{width:24px;flex:none;display:flex;justify-content:center}
+  .vC .tr .c-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vC .tr .c-lb{width:96px;flex:none;display:flex;gap:5px;overflow:clip}
+  .vC .tr .c-prj{width:112px;flex:none;color:var(--text-2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vC .tr .c-as{width:28px;flex:none;display:flex;justify-content:flex-end}
+  .vC .tr .c-wh{width:40px;flex:none;color:var(--text-3);font-size:11px;text-align:right}
+  .vC .grp2{display:flex;align-items:center;gap:9px;min-height:38px;padding-inline:10px;color:var(--text-2);font-size:12px;font-weight:600;position:sticky;top:30px;background:var(--bg)}
+  .vC .grp2 .n{color:var(--text-3);font-weight:400}
+  .vC .sticon{cursor:pointer;border-radius:4px;padding:2px}
+  @media (hover:hover) and (pointer:fine){ .vC .sticon:hover{background:oklch(100% 0 0 / 9%)} }
+  .vC .modalwrap{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-block-start:9vh;background:oklch(0% 0 0 / 50%)}
+  .vC .modalwrap.open{display:flex}
+  .vC .modal{width:660px;max-width:92vw;max-height:76vh;overflow-y:auto;background:var(--panel);border:1px solid var(--border-2);border-radius:14px;padding:26px 28px;box-shadow:0 32px 80px oklch(0% 0 0 / 50%)}
+  @media (prefers-reduced-motion:no-preference){
+    .vC .modalwrap.open .modal{animation:modalIn 200ms var(--ease-out)}
+    @keyframes modalIn{from{opacity:0;transform:scale(.97) translateY(6px)}to{opacity:1;transform:none}}
+  }
+  .vC .foot{position:fixed;bottom:0;inset-inline:0;height:32px;display:flex;align-items:center;justify-content:center;gap:18px;font-size:11px;color:var(--text-3);background:var(--bg);border-block-start:1px solid var(--border)}
+
+  /* ============ variant L : landing ============ */
+  .vL{height:100vh;overflow-y:auto;overflow-x:clip}
+  .vL .wrap{max-width:1120px;margin-inline:auto;padding-inline:28px}
+  .vL nav{display:flex;align-items:center;gap:26px;padding-block:22px}
+  .vL nav .logo{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px}
+  .vL nav .logo i{width:22px;height:22px;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;font-style:normal}
+  .vL nav a{color:var(--text-2);text-decoration:none;font-size:13px}
+  @media (hover:hover) and (pointer:fine){ .vL nav a:hover{color:var(--text)} }
+  .vL nav .grow{flex:1}
+  .vL .btn{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 15px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+  .vL .btn.pri{background:var(--accent);color:#fff}
+  @media (hover:hover) and (pointer:fine){ .vL .btn.pri:hover{background:var(--accent-strong)} }
+  .vL .btn.sec{border:1px solid var(--border-2);color:var(--text-2)}
+  @media (hover:hover) and (pointer:fine){ .vL .btn.sec:hover{color:var(--text);border-color:oklch(100% 0 0 / 22%)} }
+  .vL .hero{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px;align-items:center;padding-block:64px 72px}
+  .vL .hero h1{font-size:clamp(30px,4.2vw,46px);line-height:1.12;letter-spacing:-0.025em;font-weight:650;margin-block-end:20px}
+  .vL .hero p{color:var(--text-2);font-size:16px;line-height:1.65;max-width:44ch;margin-block-end:30px}
+  .vL .hero .ctas{display:flex;gap:12px;flex-wrap:wrap}
+  .vL .hero .note{margin-block-start:14px;font-size:12px;color:var(--text-3)}
+  /* the product window — the hero IS the product */
+  .vL .window{border:1px solid var(--border-2);border-radius:12px;background:var(--panel);box-shadow:0 32px 90px oklch(0% 0 0 / 45%);overflow:clip}
+  .vL .chrome{display:flex;align-items:center;gap:7px;height:38px;padding-inline:14px;border-block-end:1px solid var(--border);background:var(--panel-2)}
+  .vL .chrome i{width:10px;height:10px;border-radius:50%;background:oklch(100% 0 0 / 12%)}
+  .vL .chrome .url{margin-inline-start:12px;font-size:11.5px;color:var(--text-3)}
+  .vL .appdemo{display:grid;grid-template-columns:150px minmax(0,1fr);min-height:308px;position:relative}
+  .vL .mside{border-inline-end:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:3px}
+  .vL .mside .h{font-size:10.5px;color:var(--text-3);padding:10px 8px 4px;letter-spacing:.05em}
+  .vL .mside .mi{font-size:12px;color:var(--text-2);padding:4px 8px;border-radius:5px}
+  .vL .mside .mi.on{background:var(--hover);color:var(--text)}
+  .vL .mlist{padding-block:8px;position:relative}
+  .vL .mrow{display:flex;align-items:center;gap:10px;height:36px;padding-inline:14px;font-size:12.5px}
+  .vL .mrow .id{color:var(--text-3);width:52px;flex:none;font-size:11.5px}
+  .vL .mrow .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vL .mrow .when{color:var(--text-3);font-size:10.5px}
+  .vL .cursorbar{position:absolute;inset-inline:8px;height:36px;border-radius:6px;background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);top:8px;pointer-events:none}
+  @media (prefers-reduced-motion:no-preference){
+    .vL .cursorbar{animation:kbd 8s steps(1,end) infinite}
+    @keyframes kbd{
+      0%,13%{transform:translateY(0)} 16%,29%{transform:translateY(36px)}
+      32%,45%{transform:translateY(72px)} 48%,61%{transform:translateY(108px)}
+      64%,77%{transform:translateY(144px)} 80%,97%{transform:translateY(180px)} 100%{transform:translateY(0)}
+    }
+    .vL .window{animation:winIn 450ms var(--ease-out) both}
+    @keyframes winIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  }
+  /* keyboard strip — the product's signature, in its own words */
+  .vL .kstrip{display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:22px 0;border-block:1px solid var(--border)}
+  .vL .kstrip .kk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2)}
+  /* asymmetric feature grid: one wide demo block + two quiet ones — not three identical cards */
+  .vL .feats{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:20px;padding-block:56px 24px}
+  .vL .f{border:1px solid var(--border);border-radius:12px;padding:26px 28px;background:var(--panel)}
+  .vL .f h3{font-size:16.5px;font-weight:600;letter-spacing:-0.015em;margin-block-end:10px}
+  .vL .f p{color:var(--text-2);font-size:13.5px;line-height:1.65}
+  .vL .f.wide{grid-row:span 2;display:flex;flex-direction:column}
+  .vL .f.wide .demo{margin-block-start:auto;padding-block-start:20px}
+  .vL .f.wide .demorow{display:flex;align-items:center;gap:10px;height:38px;padding-inline:12px;border-radius:6px;font-size:13px}
+  @media (hover:hover) and (pointer:fine){ .vL .f.wide .demorow:hover{background:var(--hover)} }
+  .vL .f.wide .hintline{font-size:11.5px;color:var(--text-3);padding-inline-start:12px;margin-block-start:8px}
+  .vL .f .mrow2{display:flex;align-items:center;gap:9px;margin-block:8px 0;font-size:13px;color:var(--text-2)}
+  .vL footer{display:flex;align-items:center;gap:14px;padding:30px 0 120px;color:var(--text-3);font-size:12px}
+  .vL footer .grow{flex:1}
+  .vL footer button{color:var(--text-2);text-decoration:underline;text-underline-offset:3px}
+  @media (max-width:880px){
+    .vL .hero{grid-template-columns:1fr;gap:36px;padding-block:40px 48px}
+    .vL .feats{grid-template-columns:1fr}
+    .vL .f.wide{grid-row:auto}
+  }
+
+  /* ============ overlays ============ */
+  /* palette opens via ⌘K (100×/day): NO animation — instant, by design */
+  .palette-wrap,.keys-wrap{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-block-start:13vh;background:oklch(0% 0 0 / 50%);z-index:60}
+  .palette-wrap.open,.keys-wrap.open{display:flex}
+  .palette{width:540px;background:var(--panel);border:1px solid var(--border-2);border-radius:12px;overflow:clip;box-shadow:0 32px 80px oklch(0% 0 0 / 50%)}
+  .palette .pin{display:flex;align-items:center;gap:10px;padding:13px 15px;border-block-end:1px solid var(--border)}
+  .palette .pin input{flex:1}
+  .palette .plist{max-height:320px;overflow-y:auto;padding:6px}
+  .palette .pit{display:flex;align-items:center;gap:10px;min-height:34px;padding:2px 10px;border-radius:6px;color:var(--text-2);cursor:default}
+  .palette .pit.first{background:var(--accent-soft);color:var(--text)}
+  .palette .psec{padding:9px 11px 4px;font-size:11px;letter-spacing:.05em;color:var(--text-3)}
+  .keys{width:580px;background:var(--panel);border:1px solid var(--border-2);border-radius:12px;padding:24px 26px;box-shadow:0 32px 80px oklch(0% 0 0 / 50%)}
+  .keys h3{font-size:14px;margin-block-end:14px}
+  .keys .krow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:13px;color:var(--text-2)}
+  .toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--panel-2);border:1px solid var(--border-2);border-radius:9px;padding:9px 16px;font-size:12.5px;color:var(--text-2);opacity:0;transition:opacity 180ms var(--ease-out),transform 180ms var(--ease-out);z-index:70;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion:reduce){ .toast{transition:opacity 80ms linear} }
+
+  /* ============ floating variant switcher ============ */
+  .switcher{position:fixed;bottom:16px;inset-inline-end:16px;display:flex;align-items:center;gap:2px;background:oklch(23% 0.007 270);border:1px solid oklch(100% 0 0 / 16%);border-radius:24px;padding:4px;box-shadow:0 10px 30px oklch(0% 0 0 / 45%);z-index:80}
+  .switcher button{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:oklch(85% 0 0)}
+  .switcher .lbl{padding:0 10px;font-size:12px;white-space:nowrap}
+  .switcher .lbl b{color:var(--accent-strong);font-weight:600}
+  .switcher .proto{font-size:9.5px;letter-spacing:.08em;color:var(--text-3);padding-inline-end:8px;border-inline-end:1px solid oklch(100% 0 0 / 14%);margin-inline-end:6px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="palette-wrap" id="palette">
+  <div class="palette">
+    <div class="pin">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-2)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="paletteInput" placeholder="Type a command or search…" autocomplete="off">
+      <span class="kbd">esc</span>
+    </div>
+    <div class="plist" id="paletteList"></div>
+  </div>
+</div>
+
+<div class="keys-wrap" id="keys">
+  <div class="keys">
+    <h3>Keyboard</h3>
+    <div class="krow"><span>Command menu</span><span class="kbd">⌘ K</span></div>
+    <div class="krow"><span>Create new issue</span><span class="kbd">C</span></div>
+    <div class="krow"><span>Go to team</span><span><span class="kbd">G</span> <span class="kbd">T</span></span></div>
+    <div class="krow"><span>Go to inbox</span><span><span class="kbd">G</span> <span class="kbd">B</span></span></div>
+    <div class="krow"><span>Assign to me</span><span class="kbd">I</span></div>
+    <div class="krow"><span>Set status</span><span class="kbd">S</span></div>
+    <div class="krow"><span>Set priority</span><span class="kbd">P</span></div>
+    <div class="krow"><span>Add label</span><span class="kbd">L</span></div>
+    <div class="krow"><span>Next / previous issue</span><span><span class="kbd">J</span> <span class="kbd">K</span></span></div>
+    <div class="krow"><span>Cycle variant (prototype)</span><span><span class="kbd">←</span> <span class="kbd">→</span></span></div>
+    <div class="krow"><span>Shortcuts</span><span class="kbd">?</span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="switcher" id="switcher">
+  <span class="proto">PROTOTYPE</span>
+  <button id="prevVar" class="press" title="Previous variant">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 6-6 6 6 6"/></svg>
+  </button>
+  <span class="lbl" id="varLbl"></span>
+  <button id="nextVar" class="press" title="Next variant">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 6 6 6-6 6"/></svg>
+  </button>
+</div>
+
+<script>
+/* ============================== data ============================== */
+const PEOPLE = {
+  AR:{n:"A. Rao",  h:"#eb5757"}, JM:{n:"J. Mora", h:"#2f80ed"},
+  KS:{n:"K. Sato", h:"#27ae60"}, MK:{n:"M. Kim",  h:"#9b51e0"},
+  UN:{n:"Unassigned", h:"#3a3b41"},
+};
+const LABELS = {bug:{c:"#eb5757"}, core:{c:"#5e6ad2"}, design:{c:"#9b51e8"}, polish:{c:"#f2994a"}, chore:{c:"#6b6f76"}, docs:{c:"#2f80ed"}};
+const STATES = ["backlog","todo","in_progress","done","cancelled"];
+const STATE_META = {backlog:{n:"Backlog"},todo:{n:"Todo"},in_progress:{n:"In Progress"},done:{n:"Done"},cancelled:{n:"Cancelled"}};
+const I = (id,title,state,pr,labels,asg,proj,est,when)=>({id,title,state,pr,labels,asg,proj,est,when});
+const ISSUES = [
+  I("ENG-101","Fix cycle rollover skipping unassigned issues","in_progress",3,["bug","core"],"AR","Payments revamp",3,"10m"),
+  I("ENG-102","Fractional ordering rebalance when dragging across groups","in_progress",2,["core"],"JM","Payments revamp",2,"1h"),
+  I("ENG-103","SSE reconnect loses invalidation watermark","todo",4,["bug"],"AR",null,null,"2h"),
+  I("ENG-104","Virtualize group headers in flat list mode","todo",2,["core"],"JM",null,2,"3h"),
+  I("ENG-105","Keyboard chord registry: scope leaks into inputs","todo",3,["bug"],"KS",null,1,"4h"),
+  I("ENG-112","Bulk multi-select across groups","todo",2,["core"],"UN",null,null,"6h"),
+  I("ENG-106","Seed 10k-issue dataset flag","done",1,["chore"],"UN",null,1,"1d"),
+  I("ENG-107","Boot check catches missing repositories","done",2,["core"],"AR","Payments revamp",1,"1d"),
+  I("ENG-113","Activity formatter snapshots for every verb","done",2,["core"],"KS",null,2,"2d"),
+  I("ENG-108","Filter spec zod schema drifts from domain type","backlog",2,["core"],"UN",null,null,"2d"),
+  I("ENG-109","Dark theme contrast audit for tokens","backlog",1,["design"],"UN","Docs redesign",null,"2d"),
+  I("ENG-110","Estimate rollups include cancelled issues","backlog",3,["bug"],"KS",null,1,"3d"),
+  I("ENG-114","Import Linear CSV (stretch)","cancelled",0,[],"UN",null,null,"4d"),
+  I("DES-21","Density scale token pass","in_progress",2,["design"],"MK","Docs redesign",1,"30m"),
+  I("DES-22","Roadmap timeline bar hover states","todo",1,["design"],"MK","Docs redesign",1,"2h"),
+  I("DES-23","Empty-state illustration set","backlog",0,["design"],"UN",null,null,"3d"),
+  I("DES-24","Shortcut cheat-sheet copy","done",1,["docs"],"MK","Docs redesign",1,"1d"),
+];
+
+/* ============================== atoms ============================== */
+function statusIcon(s, clickable){
+  const w=`width="14" height="14" viewBox="0 0 14 14"`;
+  const svgs={
+    backlog:`<svg ${w} fill="none" stroke="#6b6f76" stroke-width="1.6" stroke-dasharray="2 2"><circle cx="7" cy="7" r="5.4"/></svg>`,
+    todo:`<svg ${w} fill="none" stroke="#9aa0a8" stroke-width="1.6"><circle cx="7" cy="7" r="5.4"/></svg>`,
+    in_progress:`<svg ${w}><circle cx="7" cy="7" r="5.4" fill="none" stroke="#f2c94c" stroke-width="1.6"/><path d="M7 1.6a5.4 5.4 0 0 1 5.4 5.4H7Z" fill="#f2c94c"/></svg>`,
+    done:`<svg ${w}><circle cx="7" cy="7" r="6.2" fill="#6a76e8"/><path d="m4.4 7.2 1.8 1.8 3.4-3.8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    cancelled:`<svg ${w}><circle cx="7" cy="7" r="6.2" fill="#3f4045"/><path d="m5 5 4 4M9 5l-4 4" stroke="#9aa0a8" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  };
+  return clickable ? `<span class="sticon" data-cycle="1">${svgs[s]}</span>` : svgs[s];
+}
+function priorityIcon(p){
+  const w=`width="14" height="14" viewBox="0 0 14 14"`;
+  const bars=(n,c)=>{let r="";for(let i=0;i<3;i++){const on=i<n;r+=`<rect x="2" y="${10-i*3.4}" width="${on?10:7}" height="2" rx="1" fill="${on?c:"#3a3b41"}"/>`}return `<svg ${w}>${r}</svg>`};
+  if(p===4) return `<svg ${w}><rect x="1.5" y="1.5" width="11" height="11" rx="3" fill="#eb5757"/><path d="M7 3.6v4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10.3" r=".9" fill="#fff"/></svg>`;
+  if(p===0) return `<svg ${w}><rect x="2" y="9.6" width="10" height="2" rx="1" fill="#3a3b41"/><rect x="2" y="6.2" width="7" height="2" rx="1" fill="#3a3b41"/><rect x="2" y="2.8" width="5" height="2" rx="1" fill="#3a3b41"/></svg>`;
+  return bars(p, p===3?"#f2c94c":"#9aa0a8");
+}
+const PRIORITY_NAME={0:"No priority",1:"Low",2:"Medium",3:"High",4:"Urgent"};
+function ava(k){const p=PEOPLE[k];return k==="UN"
+  ?`<span class="ava" style="background:transparent;border:1.5px dashed #5c6167" title="Unassigned"></span>`
+  :`<span class="ava" style="background:${p.h}" title="${p.n}">${p.n.split(" ").map(w=>w[0]).join("")}</span>`}
+function labelPills(labels){return labels.map(l=>`<span class="pill"><i style="width:6px;height:6px;border-radius:2px;background:${LABELS[l].c}"></i>${l}</span>`).join("")}
+
+let selected = ISSUES[0].id;
+const issueById = id => ISSUES.find(i=>i.id===id);
+const grouped = () => STATES.map(s=>({s, items:ISSUES.filter(i=>i.state===s)})).filter(g=>g.items.length);
+
+function detailHTML(is){
+  const p=PEOPLE[is.asg];
+  return `
+    <div style="display:flex;gap:9px;align-items:center;margin-block-end:12px">
+      ${statusIcon(is.state)}${priorityIcon(is.pr)}
+      <span class="dim mono" style="font-size:12px">${is.id}</span>
+    </div>
+    <h2>${is.title}</h2>
+    <div class="prop"><span class="k">Status</span><span class="v">${statusIcon(is.state)} ${STATE_META[is.state].n}</span></div>
+    <div class="prop"><span class="k">Priority</span><span class="v">${priorityIcon(is.pr)} ${PRIORITY_NAME[is.pr]}</span></div>
+    <div class="prop"><span class="k">Assignee</span><span class="v">${ava(is.asg)} ${p.n}</span></div>
+    <div class="prop"><span class="k">Labels</span><span class="v">${is.labels.length?labelPills(is.labels):'<span class="dimmer">None</span>'}</span></div>
+    <div class="prop"><span class="k">Project</span><span class="v">${is.proj?`<span class="pill" style="color:var(--accent-strong);background:var(--accent-soft)">${is.proj}</span>`:'<span class="dimmer">None</span>'}</span></div>
+    <div class="prop"><span class="k">Estimate</span><span class="v">${is.est!=null?is.est+' points':'<span class="dimmer">None</span>'}</span></div>
+    <p class="desc">Description renders as markdown. This issue lives in memory only — this whole page is a disposable prototype of Curves' core workspace. Editing any property here would apply optimistically and reconcile instantly.</p>
+    <div class="act">
+      <div class="ev">${ava("AR")}<span><b style="color:var(--text)">A. Rao</b> changed status <span class="dimmer">Todo → In Progress</span> · 10m ago</span></div>
+      <div class="ev">${ava("KS")}<span><b style="color:var(--text)">K. Sato</b> assigned to <b style="color:var(--text)">A. Rao</b> · 2h ago</span></div>
+      <div class="ev">${ava("JM")}<span><b style="color:var(--text)">J. Mora</b> added label <span class="pill" style="display:inline-flex"><i style="width:6px;height:6px;border-radius:2px;background:${LABELS.bug.c}"></i>bug</span> · 4h ago</span></div>
+    </div>`;
+}
+
+const navSvg = {
+  inbox:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.4 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.8 1.1z"/></svg>`,
+  box:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg>`,
+  cycle:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>`,
+  flag:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22V4c4-2 8 2 12 0v12c-4 2-8-2-12 0"/></svg>`,
+  map:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h6l2-7 4 14 2-7h6"/></svg>`,
+};
+
+/* ============================== variant L : landing ============================== */
+function renderL(root){
+  const heroIssues = ISSUES.slice(0,6);
+  root.innerHTML = `
+  <div class="vL">
+    <div class="wrap">
+      <nav>
+        <span class="logo"><i>C</i>Curves</span>
+        <a href="#" data-toast="Product section is below">Product</a>
+        <a href="#" data-toast="Changelog is a stub in this prototype">Changelog</a>
+        <a href="#" data-toast="Docs are a stub in this prototype">Docs</a>
+        <span class="grow"></span>
+        <button class="btn sec press" data-variant="A">Open the app</button>
+      </nav>
+
+      <section class="hero">
+        <div>
+          <h1>The issue tracker that keeps up with you.</h1>
+          <p>Curves is keyboard-first, live for the whole team, and stays fast at ten thousand issues. Plan in cycles, ship without waiting for the page.</p>
+          <div class="ctas">
+            <button class="btn pri press" data-variant="A">Open the prototype</button>
+            <button class="btn sec press" data-keys="1">See the keyboard</button>
+          </div>
+          <p class="note">Disposable design prototype — nothing you click is saved.</p>
+        </div>
+        <div class="window" aria-label="Curves app preview">
+          <div class="chrome"><i></i><i></i><i></i><span class="url">curves.app / team ENG / all issues</span></div>
+          <div class="appdemo">
+            <div class="mside">
+              <div class="h">TEAM</div>
+              <div class="mi on">Issues</div><div class="mi">Triage</div><div class="mi">Cycle 24</div>
+              <div class="h">PROJECTS</div>
+              <div class="mi">Payments revamp</div><div class="mi">Docs redesign</div>
+            </div>
+            <div class="mlist">
+              <div class="cursorbar"></div>
+              ${heroIssues.map(is=>`
+                <div class="mrow">
+                  ${statusIcon(is.state)}<span class="id mono">${is.id}</span>${priorityIcon(is.pr)}
+                  <span class="t">${is.title}</span>
+                  ${ava(is.asg)}<span class="when mono">${is.when}</span>
+                </div>`).join("")}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="kstrip">
+        <span class="kk"><span class="kbd">C</span> create an issue</span>
+        <span class="kk"><span class="kbd">⌘K</span> jump anywhere</span>
+        <span class="kk"><span><span class="kbd">G</span> <span class="kbd">T</span></span> go to team</span>
+        <span class="kk"><span><span class="kbd">J</span> <span class="kbd">K</span></span> move down the list</span>
+        <span class="kk"><span class="kbd">?</span> see everything</span>
+      </section>
+
+      <section class="feats">
+        <div class="f wide">
+          <h3>Every edit lands before the server replies</h3>
+          <p>Change a status, drag a card, reassign mid-sentence — the list updates the instant you act, and reconciles quietly if anything disagrees. Try it: click the status icon below.</p>
+          <div class="demo">
+            <div class="demorow" data-demoid="ENG-103">
+              <span data-demo-status="1">${statusIcon(issueById("ENG-103").state)}</span>
+              <span class="mono dimmer" style="font-size:12px;width:62px">ENG-103</span>
+              <span style="flex:1">SSE reconnect loses invalidation watermark</span>
+              ${priorityIcon(4)}${ava("AR")}
+            </div>
+            <p class="hintline">Applied instantly, reconciled in the background.</p>
+          </div>
+        </div>
+        <div class="f">
+          <h3>Live for everyone at once</h3>
+          <p>Comments, edits, and inbox badges reach every open session in about a second. One source of truth, no refresh button.</p>
+          <div class="mrow2" style="flex-wrap:wrap">${ava("AR")} A. Rao and ${ava("MK")} M. Kim have this issue open right now.</div>
+        </div>
+        <div class="f">
+          <h3>Cycles that close themselves</h3>
+          <p>When a cycle ends, unfinished work moves where your team decided — next cycle or backlog. Rollover is idempotent, so a crash mid-run converges on retry.</p>
+          <div class="mrow2">${navSvg.cycle} Cycle 24 ends in 5 days. 62% complete.</div>
+        </div>
+      </section>
+
+      <footer>
+        <span>Curves — design prototype, variant L of 4.</span>
+        <span class="grow"></span>
+        <button data-variant="A">See the app</button>
+        <button data-variant="B">Board view</button>
+        <button data-variant="C">Table view</button>
+      </footer>
+    </div>
+  </div>`;
+  const page=root.querySelector(".vL");
+  page.addEventListener("click",e=>{
+    const v=e.target.closest("[data-variant]"); if(v){setVariant(v.dataset.variant);return}
+    const t=e.target.closest("[data-toast]"); if(t){e.preventDefault();toast(t.dataset.toast);return}
+    const k=e.target.closest("[data-keys]"); if(k){document.getElementById("keys").classList.add("open");return}
+    const d=e.target.closest("[data-demo-status]");
+    if(d){
+      const is=issueById("ENG-103");
+      is.state=STATES[(STATES.indexOf(is.state)+1)%STATES.length];
+      d.innerHTML=statusIcon(is.state);
+      toast(`ENG-103 → ${STATE_META[is.state].n} (optimistic, in-memory)`);
+    }
+  });
+}
+
+/* ============================== variant A ============================== */
+function renderA(root){
+  const rows = g => g.items.map(is=>`
+    <div class="row ${is.id===selected?"sel":""}" data-id="${is.id}">
+      ${statusIcon(is.state)}<span class="id mono">${is.id}</span>${priorityIcon(is.pr)}
+      <span class="title">${is.title}</span>
+      ${labelPills(is.labels)}${ava(is.asg)}<span class="when mono">${is.when}</span>
+    </div>`).join("");
+  root.innerHTML = `
+  <div class="vA">
+    <aside class="side">
+      <div class="ws"><span class="logo">C</span><b>Curves</b><span class="dimmer" style="font-size:10px;border:1px solid var(--border-2);border-radius:3px;padding:1px 5px">Free</span></div>
+      <div class="nav">${navSvg.inbox} Inbox <span class="cnt">3</span></div>
+      <div class="nav">${navSvg.box} My Issues</div>
+      <div class="sec">Team</div>
+      <div class="nav on">${navSvg.box} ENG</div>
+      <div class="nav">${navSvg.flag} Triage</div>
+      <div class="nav">${navSvg.cycle} Cycle 24 <span class="cnt">9/14</span></div>
+      <div class="nav" style="padding-inline-start:33px">DES</div>
+      <div class="sec">Views</div>
+      <div class="nav">All Issues</div><div class="nav">Bugs</div><div class="nav">Assigned to me</div>
+      <div class="sec">Projects</div>
+      <div class="nav">${navSvg.map} Payments revamp</div>
+      <div class="nav">${navSvg.map} Docs redesign</div>
+    </aside>
+    <main class="main">
+      <div class="head">
+        <h1>All Issues</h1><span class="dimmer mono">${ISSUES.length}</span>
+        <span class="chip">Label: <b>bug</b> ✕</span>
+        <span class="pill" style="cursor:default">+ Filter</span>
+        <span class="grow"></span>
+        <button class="icobtn" title="Display options"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
+        <span class="dimmer" style="font-size:11.5px">Group by <b style="color:var(--text-2)">Status</b></span>
+      </div>
+      <div class="list">
+        ${grouped().map(g=>`<div class="grp">${statusIcon(g.s)} ${STATE_META[g.s].n} <span class="n mono">${g.items.length}</span></div>${rows(g)}`).join("")}
+      </div>
+      <div class="hint"><span><span class="kbd">C</span> Create</span><span><span class="kbd">⌘K</span> Search</span><span><span class="kbd">?</span> Shortcuts</span></div>
+    </main>
+    <aside class="detail" id="vAdetail">${detailHTML(issueById(selected))}</aside>
+  </div>`;
+  root.querySelector(".list").addEventListener("click",e=>{
+    const r=e.target.closest(".row"); if(!r)return;
+    selected=r.dataset.id;
+    root.querySelectorAll(".row").forEach(x=>x.classList.toggle("sel",x.dataset.id===selected));
+    root.querySelector("#vAdetail").innerHTML=detailHTML(issueById(selected));
+  });
+}
+
+/* ============================== variant B ============================== */
+function renderB(root){
+  const lanes=[
+    {t:"Triage & Backlog", f:i=>["backlog","todo"].includes(i.state)},
+    {t:"Active", f:i=>i.state==="in_progress"},
+    {t:"Shipped", f:i=>["done","cancelled"].includes(i.state)},
+  ];
+  root.innerHTML = `
+  <div class="vB">
+    <nav class="rail">
+      <span class="ava" style="width:24px;height:24px;background:var(--accent)">C</span>
+      <span style="height:10px"></span>
+      <span class="rb">${navSvg.inbox}</span><span class="rb on">${navSvg.box}</span>
+      <span class="rb">${navSvg.cycle}</span><span class="rb">${navSvg.map}</span>
+      <span class="sp"></span><span class="rb dimmer">?</span>
+    </nav>
+    <div class="board">
+      <div class="bhead">
+        <h1>Team ENG</h1>
+        <span class="cyc">${navSvg.cycle} Cycle 24 · day 9 of 14</span>
+        <span class="cyc"><span class="bar"><i></i></span> 62%</span>
+        <span style="flex:1"></span>
+        <span class="pill" style="cursor:default">9 active</span><span class="pill" style="cursor:default">7 shipped</span>
+      </div>
+      <div class="lanes">
+        ${lanes.map((L,ix)=>{
+          const items=ISSUES.filter(L.f);
+          return `<section class="lane">
+            <h3>${ix===0?statusIcon("todo"):ix===1?statusIcon("in_progress"):statusIcon("done")} ${L.t} <span class="n mono">${items.length}</span></h3>
+            <div class="body">${items.map(is=>`
+              <div class="card ${is.id===selected?"sel":""}" data-id="${is.id}">
+                <div class="id mono">${is.id} · ${is.when}</div>
+                <div class="t">${priorityIcon(is.pr)}<span style="flex:1">${is.title}</span></div>
+                <div class="foot">${labelPills(is.labels)}<span style="flex:1"></span>${is.est!=null?`<span class="dimmer" style="font-size:11px">${is.est}p</span>`:""}${ava(is.asg)}</div>
+              </div>`).join("")}</div>
+          </section>`;
+        }).join("")}
+      </div>
+    </div>
+    <div class="drawerwrap" id="vBdw"><div class="scrim"></div><div class="drawer" id="vBdrawer">${detailHTML(issueById(selected))}</div></div>
+  </div>`;
+  root.querySelector(".lanes").addEventListener("click",e=>{
+    const c=e.target.closest(".card"); if(!c)return;
+    selected=c.dataset.id;
+    root.querySelectorAll(".card").forEach(x=>x.classList.toggle("sel",x.dataset.id===selected));
+    root.querySelector("#vBdrawer").innerHTML=detailHTML(issueById(selected));
+    root.querySelector("#vBdw").classList.add("open");
+  });
+  root.querySelector("#vBdw .scrim").addEventListener("click",()=>root.querySelector("#vBdw").classList.remove("open"));
+}
+
+/* ============================== variant C ============================== */
+function renderC(root){
+  root.innerHTML = `
+  <div class="vC">
+    <div class="crumbs"><span>ENG</span> / <span>All issues</span> / <span style="color:var(--text-2)">Cycle 24</span></div>
+    <div class="cmd" id="vCcmd">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-3)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      Search or run a command…
+      <span style="margin-inline-start:auto" class="kbd">⌘K</span>
+    </div>
+    <div class="table">
+      <div class="thr">
+        <span class="c-id">ID</span><span class="c-pr">Pr</span><span class="c-t">Title</span>
+        <span class="c-lb">Labels</span><span class="c-prj">Project</span><span class="c-as">As</span><span class="c-wh">Upd</span>
+      </div>
+      ${grouped().map(g=>`
+        <div class="grp2">${statusIcon(g.s)} ${STATE_META[g.s].n} <span class="n mono">${g.items.length}</span></div>
+        ${g.items.map(is=>`
+        <div class="tr ${is.id===selected?"sel":""}" data-id="${is.id}">
+          <span class="c-id mono">${is.id}</span>
+          <span class="c-pr">${priorityIcon(is.pr)}</span>
+          <span class="c-t">${is.title}</span>
+          <span class="c-lb">${labelPills(is.labels)}</span>
+          <span class="c-prj">${is.proj||""}</span>
+          <span class="c-as">${ava(is.asg)}</span>
+          <span class="c-wh mono">${is.when}</span>
+        </div>`).join("")}`).join("")}
+    </div>
+    <div class="foot">
+      <span><span class="kbd">⌘K</span> everything</span><span><span class="kbd">C</span> create</span>
+      <span>click a status icon to cycle it</span><span><span class="kbd">?</span> shortcuts</span>
+    </div>
+    <div class="modalwrap" id="vCmw"><div class="modal" id="vCmodal">${detailHTML(issueById(selected))}</div></div>
+  </div>`;
+  root.querySelector(".table").addEventListener("click",e=>{
+    const cyc=e.target.closest("[data-cycle]");
+    if(cyc){
+      const row=cyc.closest(".tr"); const is=issueById(row.dataset.id);
+      is.state=STATES[(STATES.indexOf(is.state)+1)%STATES.length];
+      cyc.outerHTML=statusIcon(is.state,true);
+      toast(`${is.id} → ${STATE_META[is.state].n} (in-memory only)`);
+      return;
+    }
+    const r=e.target.closest(".tr"); if(!r)return;
+    selected=r.dataset.id;
+    root.querySelectorAll(".tr").forEach(x=>x.classList.toggle("sel",x.dataset.id===selected));
+    root.querySelector("#vCmodal").innerHTML=detailHTML(issueById(selected));
+    root.querySelector("#vCmw").classList.add("open");
+  });
+  root.querySelector("#vCcmd").addEventListener("click",openPalette);
+  root.querySelector("#vCmw").addEventListener("click",e=>{if(e.target.id==="vCmw")e.target.classList.remove("open")});
+}
+
+/* ============================== palette / toast ============================== */
+const PAL_ITEMS=[
+  {sec:"Go to"},
+  {t:"Inbox", hint:"G B"},{t:"My Issues"},{t:"Team ENG"},{t:"Team DES"},{t:"Roadmap"},{t:"Cycle 24"},
+  {sec:"Actions"},
+  {t:"Create new issue", hint:"C", act:"create"},
+  {t:"Show keyboard shortcuts", hint:"?", act:"keys"},
+  {t:"Open the landing page", act:"L"},
+  {t:"Variant A — Sidebar + split pane", act:"A"},
+  {t:"Variant B — Icon rail + swimlanes", act:"B"},
+  {t:"Variant C — Command-first table", act:"C"},
+];
+const paletteEl=document.getElementById("palette"), paletteInput=document.getElementById("paletteInput"), paletteList=document.getElementById("paletteList");
+function renderPalette(q=""){
+  const items=PAL_ITEMS.filter(it=>!it.sec && it.t.toLowerCase().includes(q.toLowerCase()));
+  let first=true;
+  paletteList.innerHTML=items.map(it=>`<div class="pit ${first?(first=false,"first"):""}" data-act="${it.act||""}">
+       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>${it.t}
+       ${it.hint?`<span class="kbd" style="margin-inline-start:auto">${it.hint}</span>`:""}</div>`).join("")
+    ||`<div class="psec">No matches</div>`;
+}
+function openPalette(){paletteEl.classList.add("open");paletteInput.value="";renderPalette();paletteInput.focus()}
+function closePalette(){paletteEl.classList.remove("open")}
+paletteInput.addEventListener("input",()=>renderPalette(paletteInput.value));
+paletteList.addEventListener("click",e=>{
+  const it=e.target.closest(".pit"); if(!it)return;
+  const act=it.dataset.act;
+  closePalette();
+  if(act==="keys")document.getElementById("keys").classList.add("open");
+  else if(act==="create")toast("Create issue — stub in this prototype");
+  else if(act)setVariant(act);
+});
+let toastT;
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;t.classList.add("show");
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2000);
+}
+
+/* ============================== switcher ============================== */
+const VARIANTS=[
+  {key:"L",name:"Landing page",render:renderL},
+  {key:"A",name:"Sidebar + split pane",render:renderA},
+  {key:"B",name:"Icon rail + swimlanes + drawer",render:renderB},
+  {key:"C",name:"Command-first table + modal",render:renderC},
+];
+const app=document.getElementById("app");
+let current=null;
+function initialVariant(){
+  const q=new URLSearchParams(location.search).get("variant");
+  const h=(location.hash.match(/variant=([LABC])/)||[])[1];
+  return VARIANTS.some(v=>v.key===q)?q:(VARIANTS.some(v=>v.key===h)?h:"L");
+}
+function setVariant(key){
+  current=key;
+  const v=VARIANTS.find(v=>v.key===key);
+  v.render(app);
+  document.getElementById("varLbl").innerHTML=`<b>${v.key}</b> — ${v.name}`;
+  try{history.replaceState(null,"",`?variant=${key}`)}catch(e){location.hash=`variant=${key}`}
+}
+document.getElementById("prevVar").onclick=()=>cycle(-1);
+document.getElementById("nextVar").onclick=()=>cycle(1);
+function cycle(d){
+  const ix=VARIANTS.findIndex(v=>v.key===current);
+  setVariant(VARIANTS[(ix+d+VARIANTS.length)%VARIANTS.length].key);
+}
+
+/* ============================== global keys ============================== */
+const typing=()=>["INPUT","TEXTAREA"].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();paletteEl.classList.contains("open")?closePalette():openPalette();return}
+  if(e.key==="Escape"){closePalette();document.getElementById("keys").classList.remove("open");
+    document.getElementById("vBdw")?.classList.remove("open");
+    document.getElementById("vCmw")?.classList.remove("open");return}
+  if(typing())return;
+  if(e.key==="ArrowLeft"){cycle(-1);return}
+  if(e.key==="ArrowRight"){cycle(1);return}
+  if(e.key==="?"){document.getElementById("keys").classList.toggle("open");return}
+  if(e.key.toLowerCase()==="c"){openPalette();renderPalette("Create new issue");toast("C pressed — in the real app this opens the issue composer")}
+});
+
+setVariant(initialVariant());
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+=== verify-curves run 2026-10-24T10:12:09Z ===
+doctor: JS syntax OK
+doctor: browser /usr/sbin/chromium
+drive variant L: count= min=card  FAIL
+drive variant A: count=18 min=18 ok
+drive variant B: count=18 min=18 ok
+drive variant C: count=18 min=18 ok
+overall: FAIL
+=== verify-curves corrected run 2026-10-24T10:12:55Z (supersedes previous: runner bug, pattern truncated by spec parsing — prototype itself unaffected; A/B/C passed there) ===
+drive variant L: count=16 min=6 ok
+drive variant A: count=18 min=18 ok
+drive variant B: count=18 min=18 ok
+drive variant C: count=18 min=18 ok
+overall: PASS
