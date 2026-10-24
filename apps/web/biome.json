@@ -1,0 +1,21 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["@curves/db", "@curves/db/**", "@curves/domain", "@curves/domain/**"],
+                "message": "web reaches the server only through @curves/api (PLAN.md dependency direction: web → ui, api). Importing db or domain directly couples rendering to storage — use the typed tRPC client from @curves/api instead."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

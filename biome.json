@@ -1,0 +1,32 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": ["./packages/config/biome.base.json"],
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*.css",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.json",
+      "**/*.jsonc",
+      "**/*.mjs",
+      "**/*.cjs",
+      "**/*.ts",
+      "**/*.tsx",
+      "!**/dist",
+      "!**/.turbo",
+      "!**/coverage",
+      "!**/node_modules"
+    ]
+  },
+  "linter": {
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "error"
+      },
+      "suspicious": {
+        "noImportCycles": "error"
+      }
+    }
+  }
+}

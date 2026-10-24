@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6.42.1/schema.json",
+  "workspaces": {
+    ".": {
+      "ignoreBinaries": ["vitest"]
+    },
+    "apps/web": {
+      "entry": "src/entry.ts"
+    },
+    "packages/api": {
+      "entry": "src/entry.ts"
+    },
+    "packages/db": {
+      "entry": "src/entry.ts"
+    },
+    "packages/domain": {
+      "entry": "src/entry.ts"
+    },
+    "packages/ui": {
+      "entry": "src/entry.ts"
+    }
+  }
+}

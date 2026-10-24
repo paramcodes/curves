@@ -1,0 +1,34 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": [
+                  "@curves/domain",
+                  "@curves/domain/**",
+                  "@curves/db",
+                  "@curves/db/**",
+                  "@curves/api",
+                  "@curves/api/**",
+                  "drizzle-orm",
+                  "drizzle-orm/**"
+                ],
+                "message": "ui is a presentation leaf — no domain logic, no data access (PLAN.md dependency direction: ui → ∅). Fetch data in apps/web through @curves/api and pass it down as props."
+              },
+              {
+                "group": ["next", "next/**"],
+                "message": "packages/ui stays framework-agnostic so any app can consume it (PLAN.md dependency direction: ui → ∅). Use plain React here; Next.js-specific code belongs in apps/web."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["@curves/api", "@curves/api/**", "@curves/ui", "@curves/ui/**"],
+                "message": "db sits below api and ui (PLAN.md dependency direction: db → domain only). Move this composition up to packages/api."
+              },
+              {
+                "group": ["next", "next/**", "react", "react/**"],
+                "message": "db is server-side data access — no UI frameworks (PLAN.md dependency direction). Rendering belongs in packages/ui or apps/web."
+              },
+              {
+                "group": ["@trpc/*", "@trpc/**", "@trcp/*", "@trcp/**"],
+                "message": "the tRPC layer lives in packages/api, which consumes db — never the reverse (PLAN.md dependency direction). Move routers and validation to packages/api."
+              },
+              {
+                "group": ["better-auth", "better-auth/**"],
+                "message": "auth wiring lives in packages/api (PLAN.md dependency direction). Keep db to plain tables and repositories; api owns better-auth."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

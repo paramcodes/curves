@@ -1,0 +1,56 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": [
+                  "@curves/api",
+                  "@curves/api/**",
+                  "@curves/db",
+                  "@curves/db/**",
+                  "@curves/ui",
+                  "@curves/ui/**"
+                ],
+                "message": "domain is the bottom layer — it must not import other @curves/* packages (PLAN.md dependency direction: domain → ∅). Invert the dependency: keep pure types and invariants here, move this logic to packages/db or packages/api."
+              },
+              {
+                "group": [
+                  "drizzle-orm",
+                  "drizzle-orm/**",
+                  "pg",
+                  "pg/**",
+                  "postgres",
+                  "postgres/**",
+                  "node:fs",
+                  "node:fs/**",
+                  "node:net",
+                  "node:net/**"
+                ],
+                "message": "domain is pure — no I/O, no frameworks (PLAN.md dependency direction). Move this logic to packages/db or packages/api."
+              },
+              {
+                "group": [
+                  "next",
+                  "next/**",
+                  "react",
+                  "react/**",
+                  "@trpc/*",
+                  "@trpc/**",
+                  "better-auth",
+                  "better-auth/**"
+                ],
+                "message": "domain is pure — no I/O, no frameworks (PLAN.md dependency direction). Move this logic to packages/db or packages/api; auth wiring lives in packages/api."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

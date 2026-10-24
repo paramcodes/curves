@@ -1,0 +1,21 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["@curves/ui", "@curves/ui/**", "react", "react/**"],
+                "message": "api is server-side composition — no UI (PLAN.md dependency direction). Components belong in packages/ui, rendering in apps/web."
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
