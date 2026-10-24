@@ -24,3 +24,5 @@ Phase 1 needs `orderBetween(prev, next)` for drag/keyboard reorder within and ac
 
 - Rebalance is an explicit, testable domain event; the repo layer applies it transactionally when `needsRebalance` fires after a move.
 - Migration path to fraction strings (alternative 1) is narrow: `OrderKey` stays an opaque branded string, so only the three functions change. **Revisit trigger:** rebalances exceed ~0.1% of moves in practice, or any precision bug is observed.
+
+**Update (2026-10-24, phase-1 review finding S4):** the repo-side transactional rebalance described under Consequences is deferred to Phase 4, where `move()` gets its drag-reorder callers — today `move()` writes the key and the caller is responsible for checking `needsRebalance`. Nothing else in the decision changes.

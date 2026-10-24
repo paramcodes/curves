@@ -23,6 +23,10 @@
               {
                 "group": ["better-auth", "better-auth/**"],
                 "message": "auth wiring lives in packages/api (PLAN.md dependency direction). Keep db to plain tables and repositories; api owns better-auth."
+              },
+              {
+                "group": ["**/packages/api/**", "**/packages/ui/**"],
+                "message": "Boundary rule (PLAN.md dependency direction) — also enforced for deep relative imports. API composition belongs in packages/api."
               }
             ]
           }

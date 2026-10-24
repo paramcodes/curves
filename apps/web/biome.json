@@ -11,6 +11,10 @@
               {
                 "group": ["@curves/db", "@curves/db/**", "@curves/domain", "@curves/domain/**"],
                 "message": "web reaches the server only through @curves/api (PLAN.md dependency direction: web → ui, api). Importing db or domain directly couples rendering to storage — use the typed tRPC client from @curves/api instead."
+              },
+              {
+                "group": ["**/packages/db/**", "**/packages/domain/**"],
+                "message": "Boundary rule (PLAN.md dependency direction) — also enforced for deep relative imports. Use the typed tRPC client from @curves/api."
               }
             ]
           }

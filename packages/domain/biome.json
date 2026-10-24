@@ -46,6 +46,10 @@
                   "better-auth/**"
                 ],
                 "message": "domain is pure — no I/O, no frameworks (PLAN.md dependency direction). Move this logic to packages/db or packages/api; auth wiring lives in packages/api."
+              },
+              {
+                "group": ["**/packages/api/**", "**/packages/db/**", "**/packages/ui/**"],
+                "message": "Boundary rule (PLAN.md dependency direction) — also enforced for deep relative imports. Move the logic to the higher layer instead."
               }
             ]
           }

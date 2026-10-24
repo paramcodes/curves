@@ -384,6 +384,29 @@ const ORACLE_SPECS: Array<{ name: string; spec: FilterSpec }> = [
   },
   { name: "empty or-group is false", spec: OR() },
   { name: "empty and-group is true", spec: AND() },
+  // Phase-1 review B1 repros: wire-valid (zod-blessed) cross-typed values where
+  // Postgres would silently coerce ("3" → 3, ISO string → timestamptz) but
+  // evaluate is strict — the SQL mirror must agree with evaluate, not PG.
+  {
+    name: "created eq ISO string (cross-typed, matches nothing)",
+    spec: cond("created", "eq", at(3 * minute).toISOString()),
+  },
+  {
+    name: "priority in ['3'] (cross-typed members never match)",
+    spec: cond("priority", "in", ["3"]),
+  },
+  {
+    name: "priority neq '3' (cross-typed, true for every row)",
+    spec: cond("priority", "neq", "3"),
+  },
+  {
+    name: "priority neq 3 (scalar — IS DISTINCT FROM incl. null estimate-like fields)",
+    spec: cond("priority", "neq", 3),
+  },
+  {
+    name: "assignee nin with null member (null fields stay non-members)",
+    spec: cond("assignee", "nin", [ada, null] as unknown as FilterValue),
+  },
 ];
 
 // ---------------------------------------------------------------- contract

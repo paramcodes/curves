@@ -11,6 +11,10 @@
               {
                 "group": ["@curves/ui", "@curves/ui/**", "react", "react/**"],
                 "message": "api is server-side composition — no UI (PLAN.md dependency direction). Components belong in packages/ui, rendering in apps/web."
+              },
+              {
+                "group": ["**/packages/ui/**"],
+                "message": "Boundary rule (PLAN.md dependency direction) — also enforced for deep relative imports. UI concerns belong in packages/ui."
               }
             ]
           }

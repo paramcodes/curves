@@ -105,6 +105,9 @@ const columnFor = (key: ScalarKey): AnyPgColumn => {
 
 const isTimeKey = (key: ScalarKey): boolean => key === "created" || key === "updated";
 
+/** Strict type match, like evaluate's `===` / `includes`: Postgres would happily coerce "3" to 3 — we must not. */
+const valueMatches = (key: ScalarKey, v: string | number): boolean => typeof v === FIELD_TYPE[key];
+
 /** created/updated compare epoch-ms numbers against the timestamptz columns. */
 const toOperand = (key: ScalarKey, value: string | number): string | number | Date =>
   isTimeKey(key) && typeof value === "number" ? new Date(value) : value;
@@ -113,6 +116,30 @@ const toOperand = (key: ScalarKey, value: string | number): string | number | Da
 // column in a fragment routes the comparison through drizzle's raw-operand
 // overloads instead of fighting the branded column types.
 const frag = (col: AnyPgColumn): SQL => sql`${col}`;
+
+/**
+ * eq/neq, strictly typed like evaluate's `===` / `!==`: a cross-typed or array
+ * operand matches nothing under eq, and differs from every field value under
+ * neq (vacuous truth → the predicate is omitted). Postgres would silently
+ * coerce "3" into 3 — this guard is why it must not get the chance.
+ */
+const equalityToSql = (cond: FilterCondition, col: SQL, key: ScalarKey): SQL | undefined => {
+  if (cond.value === null) {
+    return cond.op === "eq" ? isNull(col) : isNotNull(col);
+  }
+  const crossTyped = Array.isArray(cond.value) || !valueMatches(key, cond.value);
+  if (crossTyped) {
+    return cond.op === "eq" ? sql`false` : undefined;
+  }
+  // valueMatches is opaque to the compiler — the guard above makes this cast total.
+  const v = cond.value as string | number;
+  if (cond.op === "eq") {
+    return eq(col, toOperand(key, v));
+  }
+  // IS DISTINCT FROM: a null field is "not equal" to any scalar, mirroring
+  // `value !== expected` in evaluate (plain <> yields NULL, dropping rows).
+  return sql`${col} is distinct from ${toOperand(key, v)}`;
+};
 
 const conditionToSql = (cond: FilterCondition): SQL | undefined => {
   if (cond.key === "label") {
@@ -124,15 +151,8 @@ const conditionToSql = (cond: FilterCondition): SQL | undefined => {
     case "exists":
       return isNotNull(col);
     case "eq":
-      return cond.value === null
-        ? isNull(col)
-        : eq(col, toOperand(cond.key, cond.value as string | number));
     case "neq":
-      // IS DISTINCT FROM: a null field is "not equal" to any scalar, mirroring
-      // `value !== expected` in evaluate (plain <> yields NULL, dropping rows).
-      return cond.value === null
-        ? isNotNull(col)
-        : sql`${col} is distinct from ${toOperand(cond.key, cond.value as string | number)}`;
+      return equalityToSql(cond, col, cond.key);
     case "in": {
       if (!Array.isArray(cond.value)) {
         return sql`false`;
@@ -182,13 +202,20 @@ const membership = (
   value: Array<string | number>,
   negate: boolean,
 ): SQL => {
-  const nonNull = value.filter((v) => v !== null);
-  const hasNull = value.length !== nonNull.length;
-  const list = nonNull.map((v) => toOperand(key, v));
-
-  const positive: SQL = hasNull
-    ? (or(inArray(col, list), isNull(col)) as SQL)
-    : (and(isNotNull(col), inArray(col, list)) as SQL);
+  // evaluate's includes() is strict: cross-typed members never match, so they
+  // are dropped before the SQL is built (Postgres would coerce "3" into 3).
+  const nonNull = value.filter((v): v is string | number => v !== null && valueMatches(key, v));
+  const hasNull = value.some((v) => v === null);
+  const operands = nonNull.map((v) => toOperand(key, v));
+  let positive: SQL;
+  if (nonNull.length === 0) {
+    // nothing type-matches: only a null member (if any) can match a null field
+    positive = hasNull ? isNull(col) : sql`false`;
+  } else {
+    positive = hasNull
+      ? (or(inArray(col, operands), isNull(col)) as SQL)
+      : (and(isNotNull(col), inArray(col, operands)) as SQL);
+  }
   return negate ? not(positive) : positive;
 };
 

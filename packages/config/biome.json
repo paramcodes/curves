@@ -11,6 +11,15 @@
               {
                 "group": ["@curves/*", "@curves/**"],
                 "message": "config is a leaf of shared presets only — it must not import workspace packages (PLAN.md dependency direction). Shared code belongs to the package that owns it."
+              },
+              {
+                "group": [
+                  "**/packages/api/**",
+                  "**/packages/db/**",
+                  "**/packages/ui/**",
+                  "**/packages/domain/**"
+                ],
+                "message": "Boundary rule (PLAN.md dependency direction) — also enforced for deep relative imports. Config is a leaf of presets."
               }
             ]
           }

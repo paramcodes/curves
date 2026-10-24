@@ -24,6 +24,10 @@
               {
                 "group": ["next", "next/**"],
                 "message": "packages/ui stays framework-agnostic so any app can consume it (PLAN.md dependency direction: ui → ∅). Use plain React here; Next.js-specific code belongs in apps/web."
+              },
+              {
+                "group": ["**/packages/domain/**", "**/packages/db/**", "**/packages/api/**"],
+                "message": "Boundary rule (PLAN.md dependency direction) — also enforced for deep relative imports. Pass data through props; fetch in apps/web via @curves/api."
               }
             ]
           }
