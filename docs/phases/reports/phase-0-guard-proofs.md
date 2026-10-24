@@ -70,3 +70,7 @@ Restored → `boot-check: OK (skeleton)`. Deleting any package entry genuinely f
 | `node scripts/boot-check.mjs` | exit 0 |
 | **`pnpm verify:full` (full ladder)** | **exit 0 — 5.9 s wall clock** |
 | CI workflow | written, not yet exercised on GitHub (first push will tell) |
+
+## Incident 2 (post-report): Biome "no files processed" on docs-only commits
+
+A commit staging only unknown-type files (md/yaml/tsv) made `biome check {staged_files}` exit 1 with "No files were processed in the specified paths" — blocking docs commits. Fixed with a lefthook job-level `glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,css}"`: no matching staged files → the job is skipped. Verified both ways: code commits run the hook (0.9 s), docs-only commits skip it (0.00 s, commit succeeds). Note: the initial manual reproduction of this bug was misread as passing — `cmd | tail; echo $?` reports tail's exit code, the same masking trap recorded above.
