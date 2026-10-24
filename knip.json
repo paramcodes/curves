@@ -11,7 +11,7 @@
       "entry": "src/entry.ts"
     },
     "packages/domain": {
-      "entry": "src/entry.ts"
+      "entry": ["src/entry.ts", "src/core/*.ts"]
     },
     "packages/ui": {
       "entry": "src/entry.ts"
