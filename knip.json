@@ -19,7 +19,8 @@
         "src/projects/*.ts",
         "src/cycles/*.ts",
         "src/activities/*.ts",
-        "src/notifications/*.ts"
+        "src/notifications/*.ts",
+        "src/filters/*.ts"
       ]
     },
     "packages/ui": {
