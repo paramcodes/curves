@@ -1,21 +1,36 @@
+import { afterAll, beforeAll } from "vitest";
 import { deferredReposContract } from "../contracts/deferred-repos.contract";
-import { createTestDb } from "../test-db";
+import { createSharedTestDb } from "../test-db";
 import { createLabelRepo } from "./label.repo";
 import { createMilestoneRepo } from "./milestone.repo";
 import { createNotificationRepo } from "./notification.repo";
 import { createProjectRepo } from "./project.repo";
 import { createViewRepo } from "./view.repo";
 
-// Run the importable behavioral suite against fresh pglite per test.
+// One shared pglite per FILE (phase-1 exit S5): WASM init + migrations run
+// once; the contract's per-test makeRepos factory resets (truncate) first so
+// each test still starts from the bare schema before its fixture seed. The
+// contract's close() must NOT close the shared instance — it is a no-op here
+// and the file owns the real close.
+let shared: Awaited<ReturnType<typeof createSharedTestDb>>;
+
+beforeAll(async () => {
+  shared = await createSharedTestDb();
+});
+afterAll(async () => {
+  await shared.close();
+});
+
+// Run the importable behavioral suite against the reset shared db per test.
 deferredReposContract(async () => {
-  const { db, close } = await createTestDb();
+  await shared.reset();
   return {
-    labelRepo: createLabelRepo(db),
-    projectRepo: createProjectRepo(db),
-    milestoneRepo: createMilestoneRepo(db),
-    viewRepo: createViewRepo(db),
-    notificationRepo: createNotificationRepo(db),
-    db,
-    close,
+    labelRepo: createLabelRepo(shared.db),
+    projectRepo: createProjectRepo(shared.db),
+    milestoneRepo: createMilestoneRepo(shared.db),
+    viewRepo: createViewRepo(shared.db),
+    notificationRepo: createNotificationRepo(shared.db),
+    db: shared.db,
+    close: async () => {},
   };
 });

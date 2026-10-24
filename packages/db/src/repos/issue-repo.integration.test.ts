@@ -1,9 +1,22 @@
+import { afterAll, beforeAll } from "vitest";
 import { issueRepoContract } from "../contracts/issue-repo.contract";
-import { createTestDb } from "../test-db";
+import { createSharedTestDb } from "../test-db";
 import { createIssueRepo } from "./issue.repo";
 
-// Run the importable behavioral suite against fresh pglite per test.
+// One shared pglite per FILE (phase-1 exit S5): WASM init + migrations run
+// once; the contract's per-test makeRepo factory resets (truncate) first so
+// each test still starts empty. The contract's close() must NOT close the
+// shared instance — it is a no-op here and the file owns the real close.
+let shared: Awaited<ReturnType<typeof createSharedTestDb>>;
+
+beforeAll(async () => {
+  shared = await createSharedTestDb();
+});
+afterAll(async () => {
+  await shared.close();
+});
+
 issueRepoContract(async () => {
-  const { db, close } = await createTestDb();
-  return { repo: createIssueRepo(db), db, close };
+  await shared.reset();
+  return { repo: createIssueRepo(shared.db), db: shared.db, close: async () => {} };
 });

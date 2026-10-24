@@ -5,12 +5,12 @@ export default defineConfig({
   test: {
     include: ["src/**/*.integration.test.ts"],
     exclude: ["**/node_modules/**"],
-    // pglite WASM init + migration application can take seconds cold, and
-    // test files run in parallel — each file spins up per-test pglite
-    // instances, so a single test's real time can triple under 4-way file
-    // parallelism. The budget is generous on purpose: a flaky ladder is worse
-    // than a slow one.
-    testTimeout: 90_000,
+    // Each file shares ONE pglite instance (phase-1 exit S5): WASM init +
+    // migrations run once in beforeAll, tests truncate-reset. hookTimeout
+    // stays generous because migrations still run once per file. But a single
+    // test on the WARM shared db is just SQL + truncate — anything slower
+    // than 30s is a regression signal, not an expected cold-start cost.
+    testTimeout: 30_000,
     hookTimeout: 90_000,
   },
 });

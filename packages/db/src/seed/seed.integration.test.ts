@@ -1,9 +1,9 @@
 import { fixedClock } from "@curves/domain/core/clock";
 import type { FilterSpec } from "@curves/domain/filters/filter.types";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { issues } from "../schema/issues";
 import { views } from "../schema/views";
-import { createTestDb } from "../test-db";
+import { createSharedTestDb } from "../test-db";
 import { runSeed, type SeedSummary } from "./seed";
 
 /** The anchor db:reset uses — the seed must be a pure function of it. */
@@ -23,25 +23,37 @@ const EXPECTED_SUMMARY: SeedSummary = {
   views: 2,
 };
 
-/** Full issue rows — deep equality across two runs is the determinism proof. */
+// One shared pglite per FILE (phase-1 exit S5): WASM init + migrations run
+// once; each seed run truncates first instead of building a fresh database.
+let shared: Awaited<ReturnType<typeof createSharedTestDb>>;
+
+beforeAll(async () => {
+  shared = await createSharedTestDb();
+});
+afterAll(async () => {
+  await shared.close();
+});
+
+/**
+ * Full issue rows — deep equality across two runs is the determinism proof.
+ * Each run is reset → seed → snapshot on the shared instance: the original
+ * proof compared two freshly migrated databases; a full TRUNCATE (all tables,
+ * RESTART IDENTITY) leaves the same bare state, so one WASM replaces two.
+ */
 const runOnce = async (): Promise<{
   summary: SeedSummary;
   issueRows: Array<typeof issues.$inferSelect>;
   viewRows: Array<typeof views.$inferSelect>;
 }> => {
-  const { db, close } = await createTestDb();
-  try {
-    const summary = await runSeed(db, ANCHOR);
-    const issueRows = await db.select().from(issues);
-    const viewRows = await db.select().from(views);
-    return { summary, issueRows, viewRows };
-  } finally {
-    await close();
-  }
+  await shared.reset();
+  const summary = await runSeed(shared.db, ANCHOR);
+  const issueRows = await shared.db.select().from(issues);
+  const viewRows = await shared.db.select().from(views);
+  return { summary, issueRows, viewRows };
 };
 
 describe("deterministic seed", () => {
-  it("two fresh databases produce identical summaries and byte-identical issue rows", async () => {
+  it("two seed runs produce identical summaries and byte-identical issue rows", async () => {
     const first = await runOnce();
     const second = await runOnce();
     // counts match the summary exactly — 50 ENG + 8 DES, not a near-miss
