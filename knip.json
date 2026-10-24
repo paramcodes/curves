@@ -14,7 +14,9 @@
         "src/test-db.ts",
         "src/repos/*.ts",
         "src/contracts/*.ts",
-        "src/jobs/*.ts"
+        "src/jobs/*.ts",
+        "src/seed/*.ts",
+        "src/db-reset.ts"
       ]
     },
     "packages/domain": {

@@ -10,3 +10,6 @@ coverage/
 
 .DS_Store
 .zcode/
+
+# local database files (db:reset default target)
+.pglite/

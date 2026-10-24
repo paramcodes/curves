@@ -12,6 +12,7 @@
     "verify": "pnpm check && turbo run test",
     "verify:full": "pnpm verify && pnpm exec turbo run test:integration && node scripts/boot-check.mjs",
     "test:file": "vitest run",
+    "db:reset": "pnpm --filter @curves/db run db:reset",
     "prepare": "lefthook install"
   },
   "devDependencies": {
