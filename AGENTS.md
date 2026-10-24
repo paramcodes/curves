@@ -1,14 +1,14 @@
 # AGENTS.md — start here
 
-Curves: a Linear clone built agent-first. **Status: Phase 0 complete — scaffold, guardrails, and the verification ladder are live; next: [Phase 1](docs/phases/01-domain-data.md).**
+Curves: a Linear clone built agent-first. **Status: Phase 1 complete — domain model + data layer live (84 domain tests, 36 integration tests, deterministic seed); next: [Phase 2](docs/phases/02-api-auth.md) (API & auth).**
 
 1. Read [PLAN.md](PLAN.md) — master plan: stack, layout, global rules, phase index.
 2. Your work belongs to exactly one phase: `docs/phases/`.
-3. Phase 0 is complete (see its [guard-proofs report](docs/phases/reports/phase-0-guard-proofs.md)). Do not start a phase before the previous one's acceptance criteria pass.
+3. Phase 0 and Phase 1 are complete (see the [phase-1 exit report](docs/phases/reports/phase-1-exit.md), incl. recorded deferrals: 5 repos → Phase 2 first slice). Do not start a phase before the previous one's acceptance criteria pass.
 
 ## Repo contract (summary — PLAN.md is authoritative)
 
-- Verification ladder (all green as of Phase 0, `verify:full` ≈ 6 s): `pnpm check` → `pnpm verify` → `pnpm verify:full` (+ `pnpm test:file <path>`). Pre-commit hook = Biome on staged files only; everything else is CI.
+- Verification ladder: `pnpm check` (incl. schema↔migration regen gate) → `pnpm verify` → `pnpm verify:full` (+ `pnpm test:file <path>`, `pnpm db:reset`). Wall clock: `verify:full` ≈ 301 s cold / ≈ 5 s warm (turbo cache; the pglite integration tier dominates cold runs — shrink task in the phase-1 exit report). Pre-commit hook = Biome on staged files only; everything else is CI.
 - Definition of done: ladder green + the touched surface observed running (browser/DB) + docs touched.
 - TypeScript strictest; no `any`; branded IDs; zod only at boundaries; business logic lives in `packages/domain`, never in routers or components.
 - Never edit: applied migrations, CI thresholds.
