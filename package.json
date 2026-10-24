@@ -8,7 +8,8 @@
     "node": ">=26"
   },
   "scripts": {
-    "check": "biome check . && turbo run typecheck && knip",
+    "check": "biome check . && turbo run typecheck && knip && pnpm regen:check",
+    "regen:check": "pnpm --filter @curves/db exec drizzle-kit generate && node -e \"const r=require('child_process').spawnSync('git',['status','--porcelain','--','packages/db/src/migrations'],{encoding:'utf8'});if(r.stdout.trim()){console.error('schema-migration drift: regenerate and commit the migration before check can pass.\\n'+r.stdout);process.exit(1)}\"",
     "verify": "pnpm check && turbo run test",
     "verify:full": "pnpm verify && pnpm exec turbo run test:integration && node scripts/boot-check.mjs",
     "test:file": "vitest run",

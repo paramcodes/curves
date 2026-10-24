@@ -16,7 +16,8 @@
         "src/contracts/*.ts",
         "src/jobs/*.ts",
         "src/seed/*.ts",
-        "src/db-reset.ts"
+        "src/db-reset.ts",
+        "src/boot-wiring.ts"
       ]
     },
     "packages/domain": {

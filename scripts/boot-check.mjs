@@ -1,6 +1,9 @@
-// Boot check — imports every package's public entry and asserts the wiring holds.
-// Skeleton edition: real boot content arrives with Phases 1-2.
-// Node 26 imports the .ts entries natively (type stripping, erasable syntax only).
+// Boot check — imports every package's public entry and asserts the wiring holds,
+// then constructs the db layer for real (migrations + every repo + the rollover job).
+// Node 26 imports the .ts entries natively (type stripping, erasable syntax only);
+// the db wiring runs through tsx (its modules use extensionless relative imports).
+
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,4 +42,13 @@ for (const entry of entries) {
   }
 }
 
-console.log("boot-check: OK (skeleton)");
+// Phase 1: construct schema + repositories + job against a throwaway pglite db.
+const wiring = spawnSync("pnpm", ["--filter", "@curves/db", "exec", "tsx", "src/boot-wiring.ts"], {
+  cwd: root,
+  stdio: "inherit",
+});
+if (wiring.status !== 0) {
+  fail("db boot wiring failed (migrations + repos + rollover job did not construct)");
+}
+
+console.log("boot-check: OK (entries + db wiring)");
