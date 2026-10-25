@@ -13,7 +13,7 @@ import {
 } from "@curves/domain/core/ids";
 import type { DisplaySpec } from "@curves/domain/filters/display.types";
 import type { Issue, IssueRelation, OrderKey, Priority } from "@curves/domain/issues/issue.types";
-import { orderKeyNumber } from "@curves/domain/issues/ordering";
+import { orderKey, orderKeyNumber } from "@curves/domain/issues/ordering";
 import { and, asc, count, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { issueLabels } from "../schema/issue_labels";
@@ -180,6 +180,24 @@ const patchToSet = (patch: IssuePatch): Partial<typeof issues.$inferInsert> => {
     takeDefined(set, patch, key);
   }
   return set;
+};
+
+/**
+ * The team's highest issue order key (numeric max over the double-precision
+ * serialization — a plain SQL max() over the text column would compare
+ * lexically), or null when the team has no issues. The create path's
+ * append-allocation input: orderBetween(lastIssueOrder(...), null) appends
+ * 0, 1, 2, … per team — the same scheme the seed uses.
+ */
+export const lastIssueOrder = async (db: Db, team: TeamId): Promise<OrderKey | null> => {
+  const [agg] = await db
+    .select({ maxOrder: max(sql`${issues.order}::double precision`) })
+    .from(issues)
+    .where(eq(issues.teamId, team));
+  const maxOrder = agg?.maxOrder;
+  // pg parses float8 into JS numbers; Number() only satisfies the static type
+  // drizzle gives the raw expression.
+  return maxOrder === null || maxOrder === undefined ? null : orderKey(Number(maxOrder));
 };
 
 /**

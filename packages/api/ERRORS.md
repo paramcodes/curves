@@ -35,6 +35,15 @@ Notes:
   `UNAUTHORIZED` by `protectedProcedure` before any handler runs. Revisit only
   if a client needs to distinguish authz failures programmatically.
 
+## Framework-internal codes (not in the table by design)
+
+| tRPC `code`            | When a client sees it                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `UNAUTHORIZED`         | Any `protectedProcedure` reached without a valid session (the trpc.ts guard).      |
+| `BAD_REQUEST`          | zod input validation failures, malformed cursors, and authz failures (table above). |
+| `CONFLICT`             | Domain `duplicate`/`conflict` (table above), e.g. a taken team key or label name.   |
+| `INTERNAL_SERVER_ERROR`| Anything unmapped — always a bug.                                                   |
+
 ## Adding a new error code
 
 1. Add the `DomainErrorCode` + subclass in `packages/domain/src/core/errors.ts`.

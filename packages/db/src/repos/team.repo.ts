@@ -1,18 +1,30 @@
-import type { TeamId, UserId } from "@curves/domain/core/ids";
+import { randomUUID } from "node:crypto";
+import { DuplicateError } from "@curves/domain/core/errors";
+import { type TeamId, teamId as teamIdCtor, type UserId } from "@curves/domain/core/ids";
 import type { Team, TeamRole } from "@curves/domain/teams/team.types";
 import { and, asc, eq } from "drizzle-orm";
 import { teamMembers } from "../schema/team_members";
 import { teams } from "../schema/teams";
 import type { Db } from "./issue.repo";
+import { isUniqueViolation } from "./pg-errors";
 
 /** Drizzle row for teams — never leaves this package. */
 export type TeamRow = typeof teams.$inferSelect;
+
+export interface CreateTeamInput {
+  /** Deterministic id for seed/tests; a random UUID otherwise. */
+  id?: TeamId;
+  /** Short human-facing code ("ENG") used in issue identifiers; unique. */
+  key: string;
+  name: string;
+}
 
 export interface TeamRepo {
   byId(id: TeamId): Promise<Team | null>;
   /** Key is the short human code ("ENG") used in issue identifiers; unique. */
   byKey(key: string): Promise<Team | null>;
   list(): Promise<Team[]>;
+  create(input: CreateTeamInput): Promise<Team>;
 }
 
 /**
@@ -32,10 +44,10 @@ export const teamRoleFor = async (db: Db, team: TeamId, user: UserId): Promise<T
 };
 
 /**
- * Teams are identity rows with no storage-side lifecycle of their own —
- * creation happens through team setup (Phase 2+), so this repo is read-only
- * for now and the contract seeds rows directly. `list` is ordered by key for
- * deterministic output; columns map 1:1 onto the domain type.
+ * Teams were read-only through Phase 1 (the contract seeded rows directly);
+ * `create` arrived with the Phase 2 API (createTeam mutation, workspace
+ * scope). The key is the short human code ("ENG") — unique per the schema,
+ * so a collision maps to the typed DuplicateError like the label repo's.
  */
 export const createTeamRepo = (db: Db): TeamRepo => {
   const toDomain = (row: TeamRow): Team => row;
@@ -56,6 +68,23 @@ export const createTeamRepo = (db: Db): TeamRepo => {
     list: async () => {
       const rows = await db.select().from(teams).orderBy(asc(teams.key));
       return rows.map(toDomain);
+    },
+
+    create: async (input) => {
+      const values = {
+        id: input.id ?? teamIdCtor(randomUUID()),
+        key: input.key,
+        name: input.name,
+      };
+      try {
+        await db.insert(teams).values(values);
+      } catch (err) {
+        if (isUniqueViolation(err)) {
+          throw new DuplicateError(`team key "${input.key}" is already taken`);
+        }
+        throw err;
+      }
+      return toDomain(values);
     },
   };
 };

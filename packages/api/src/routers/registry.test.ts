@@ -4,9 +4,13 @@ import { z } from "zod";
 import { appRouter } from "../root";
 import { MUTATION_TAG, mutation, protectedProcedure, type TaggedMutation } from "../trpc/trpc";
 import { mutations as healthMutations, healthRouter } from "./health";
+import { mutations as issuesMutations, issuesRouter } from "./issues";
+import { mutations as labelsMutations, labelsRouter } from "./labels";
+import { mutations as statesMutations, statesRouter } from "./states";
+import { mutations as teamsMutations, teamsRouter } from "./teams";
 
 /**
- * The mutation-registry reflection test (phase-2 task 4, slice 4 edition).
+ * The mutation-registry reflection test (phase-2 task 4).
  *
  * Contract every router module must satisfy:
  *   1. Mutations are built ONLY through `mutation(...)` from trpc.ts — the
@@ -15,12 +19,12 @@ import { mutations as healthMutations, healthRouter } from "./health";
  *   2. Each router exports a `mutations` list of its mutation keys; the test
  *      cross-checks it against the actual tagged procedures in both
  *      directions.
- *   3. Every router mounted in root.ts is registered below — a router added
- *      to root but not to `mounts` fails the coverage check, so it cannot
- *      silently escape rules 1 and 2.
+ *   3. Every router mounted in root.ts is registered in `mounts` below — a
+ *      router added to root but not to `mounts` fails the coverage check, so
+ *      it cannot silently escape rules 1 and 2.
  *
  * A deliberate bite (raw `.mutation()` in health.ts) was run once and failed
- * this file before being removed — the transcript line lives in the slice
+ * this file before being removed — the transcript line lives in the slice-4
  * report (docs/phases/reports/).
  */
 
@@ -31,16 +35,27 @@ const isTagged = (value: unknown): boolean =>
   value !== null &&
   MUTATION_TAG in value;
 
-const procedureEntries = (): Array<[string, { _def: { type: string } }]> =>
+type ProcedureLike = { _def: { type: string } };
+
+const procedureEntries = (): Array<[string, ProcedureLike]> =>
   // v11 types the record through the decorated (non-flat) router shape; the
   // runtime record is flat procedures with `_def.type` — verified against the
   // installed @trpc/server 11.19.0.
-  Object.entries(appRouter._def.procedures) as unknown as Array<
-    [string, { _def: { type: string } }]
-  >;
+  Object.entries(appRouter._def.procedures) as unknown as Array<[string, ProcedureLike]>;
+
+const routerProcedures = (mounted: {
+  _def: { procedures: Record<string, unknown> };
+}): Array<[string, ProcedureLike]> =>
+  Object.entries(mounted._def.procedures) as Array<[string, ProcedureLike]>;
 
 /** Mount table mirrors root.ts — rule 3 keeps the two in lockstep. */
-const mounts = [{ prefix: "health", mutations: healthMutations }] as const;
+const mounts = [
+  { prefix: "health", router: healthRouter, mutations: healthMutations },
+  { prefix: "issues", router: issuesRouter, mutations: issuesMutations },
+  { prefix: "teams", router: teamsRouter, mutations: teamsMutations },
+  { prefix: "states", router: statesRouter, mutations: statesMutations },
+  { prefix: "labels", router: labelsRouter, mutations: labelsMutations },
+] as const;
 
 const taggedMutationKeys = (prefix: string): string[] =>
   procedureEntries()
@@ -117,6 +132,21 @@ describe("mutation registry", () => {
     expect(problems).toEqual([]);
   });
 
+  it("every router's exported mutations list matches its own procedure record", () => {
+    const problems: string[] = [];
+    for (const { prefix, router: mounted, mutations: declared } of mounts) {
+      const localMutationKeys = routerProcedures(mounted)
+        .filter(([, proc]) => proc._def.type === "mutation")
+        .map(([key]) => key);
+      if (JSON.stringify([...declared]) !== JSON.stringify(localMutationKeys)) {
+        problems.push(
+          `${prefix}: exported mutations [${[...declared].join(", ")}] ≠ procedures [${localMutationKeys.join(", ")}]`,
+        );
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
   it("mutation() tags the procedure; raw .mutation() results stay untagged (mechanism proof)", () => {
     const build = (): AnyMutationProcedure =>
       protectedProcedure
@@ -129,12 +159,5 @@ describe("mutation registry", () => {
     expect(mutation(tagged)).toBe(tagged);
 
     expect(isTagged(build())).toBe(false);
-  });
-
-  it("the health shell router exports an accurate (empty) mutations list", () => {
-    const localMutationKeys = Object.entries(healthRouter._def.procedures)
-      .filter(([, proc]) => (proc as { _def: { type: string } })._def.type === "mutation")
-      .map(([key]) => key);
-    expect([...healthMutations]).toEqual(localMutationKeys);
   });
 });
