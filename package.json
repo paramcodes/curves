@@ -12,6 +12,7 @@
     "regen:check": "pnpm --filter @curves/db exec drizzle-kit generate && node -e \"const r=require('child_process').spawnSync('git',['status','--porcelain','--','packages/db/src/migrations'],{encoding:'utf8'});if(r.stdout.trim()){console.error('schema-migration drift: regenerate and commit the migration before check can pass.\\n'+r.stdout);process.exit(1)}\"",
     "verify": "pnpm check && turbo run test",
     "verify:full": "pnpm verify && pnpm exec turbo run test:integration && node scripts/boot-check.mjs",
+    "boot:api-wiring": "pnpm --filter @curves/api run boot:wiring",
     "test:file": "vitest run",
     "db:reset": "pnpm --filter @curves/db run db:reset",
     "prepare": "lefthook install"
@@ -20,7 +21,6 @@
     "@biomejs/biome": "^2.6.2",
     "knip": "^6.42.1",
     "lefthook": "^2.2.2",
-    "tsx": "^4.23.15",
     "turbo": "^2.11.10",
     "vitest": "^5.0.5"
   }

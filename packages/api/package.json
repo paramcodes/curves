@@ -6,10 +6,12 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
-    "test:integration": "vitest run -c vitest.integration.config.ts"
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "boot:wiring": "tsx src/boot-wiring.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },

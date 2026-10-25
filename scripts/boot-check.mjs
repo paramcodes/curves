@@ -52,14 +52,10 @@ if (wiring.status !== 0) {
 }
 
 // Phase 2: construct the full appRouter and drive one procedure through a caller.
-const apiWiring = spawnSync(
-  "pnpm",
-  ["--filter", "@curves/api", "exec", "tsx", "src/boot-wiring.ts"],
-  {
-    cwd: root,
-    stdio: "inherit",
-  },
-);
+const apiWiring = spawnSync("pnpm", ["run", "boot:api-wiring"], {
+  cwd: root,
+  stdio: "inherit",
+});
 if (apiWiring.status !== 0) {
   fail("api boot wiring failed (appRouter did not construct or health.check failed)");
 }

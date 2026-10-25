@@ -175,9 +175,6 @@ importers:
       lefthook:
         specifier: ^2.2.2
         version: 2.2.2
-      tsx:
-        specifier: ^4.23.15
-        version: 4.23.15
       turbo:
         specifier: ^2.11.10
         version: 2.11.10
@@ -222,6 +219,9 @@ importers:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
