@@ -357,6 +357,21 @@ export const deferredReposContract = (makeRepos: () => Promise<DeferredReposCtx>
 
           expect((await viewRepo.byId(viewId("view_personal")))?.isTeamDefault).toBe(true);
           expect((await viewRepo.byId(viewId("view_ops")))?.isTeamDefault).toBe(true);
+
+          // CREATE enforces the same invariant: a team default created over an
+          // existing one demotes it (same transaction); personal/other-team
+          // defaults still survive
+          await viewRepo.create(makeView("view_c", "Created as default", { isTeamDefault: true }));
+          const flagsAfterCreate = Object.fromEntries(
+            (await viewRepo.byTeam(eng)).map((v) => [v.id, v.isTeamDefault]),
+          );
+          expect(flagsAfterCreate).toEqual({
+            [viewId("view_a")]: false,
+            [viewId("view_b")]: false,
+            [viewId("view_c")]: true,
+          });
+          expect((await viewRepo.byId(viewId("view_personal")))?.isTeamDefault).toBe(true);
+          expect((await viewRepo.byId(viewId("view_ops")))?.isTeamDefault).toBe(true);
         } finally {
           await close();
         }

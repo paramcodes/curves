@@ -1,8 +1,15 @@
+import { commentsRouter } from "./routers/comments";
+import { cyclesRouter } from "./routers/cycles";
 import { healthRouter } from "./routers/health";
 import { issuesRouter } from "./routers/issues";
 import { labelsRouter } from "./routers/labels";
+import { milestonesRouter } from "./routers/milestones";
+import { notificationsRouter } from "./routers/notifications";
+import { projectsRouter } from "./routers/projects";
 import { statesRouter } from "./routers/states";
 import { teamsRouter } from "./routers/teams";
+import { usersRouter } from "./routers/users";
+import { viewsRouter } from "./routers/views";
 import { router } from "./trpc/trpc";
 
 /**
@@ -17,6 +24,13 @@ export const appRouter = router({
   teams: teamsRouter,
   states: statesRouter,
   labels: labelsRouter,
+  projects: projectsRouter,
+  milestones: milestonesRouter,
+  cycles: cyclesRouter,
+  comments: commentsRouter,
+  views: viewsRouter,
+  notifications: notificationsRouter,
+  users: usersRouter,
 });
 
 export type AppRouter = typeof appRouter;

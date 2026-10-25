@@ -3,11 +3,18 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { appRouter } from "../root";
 import { MUTATION_TAG, mutation, protectedProcedure, type TaggedMutation } from "../trpc/trpc";
+import { mutations as commentsMutations, commentsRouter } from "./comments";
+import { mutations as cyclesMutations, cyclesRouter } from "./cycles";
 import { mutations as healthMutations, healthRouter } from "./health";
 import { mutations as issuesMutations, issuesRouter } from "./issues";
 import { mutations as labelsMutations, labelsRouter } from "./labels";
+import { mutations as milestonesMutations, milestonesRouter } from "./milestones";
+import { mutations as notificationsMutations, notificationsRouter } from "./notifications";
+import { mutations as projectsMutations, projectsRouter } from "./projects";
 import { mutations as statesMutations, statesRouter } from "./states";
 import { mutations as teamsMutations, teamsRouter } from "./teams";
+import { mutations as usersMutations, usersRouter } from "./users";
+import { mutations as viewsMutations, viewsRouter } from "./views";
 
 /**
  * The mutation-registry reflection test (phase-2 task 4).
@@ -55,6 +62,13 @@ const mounts = [
   { prefix: "teams", router: teamsRouter, mutations: teamsMutations },
   { prefix: "states", router: statesRouter, mutations: statesMutations },
   { prefix: "labels", router: labelsRouter, mutations: labelsMutations },
+  { prefix: "projects", router: projectsRouter, mutations: projectsMutations },
+  { prefix: "milestones", router: milestonesRouter, mutations: milestonesMutations },
+  { prefix: "cycles", router: cyclesRouter, mutations: cyclesMutations },
+  { prefix: "comments", router: commentsRouter, mutations: commentsMutations },
+  { prefix: "views", router: viewsRouter, mutations: viewsMutations },
+  { prefix: "notifications", router: notificationsRouter, mutations: notificationsMutations },
+  { prefix: "users", router: usersRouter, mutations: usersMutations },
 ] as const;
 
 const taggedMutationKeys = (prefix: string): string[] =>

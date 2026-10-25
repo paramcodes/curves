@@ -39,6 +39,11 @@ export interface ViewRepo {
   byOwner(ownerId: UserId): Promise<View[]>;
   /** The team's shared views ordered by name; personal views are not team-scoped. */
   byTeam(teamId: TeamId): Promise<View[]>;
+  /**
+   * Same one-team-default invariant as update: creating a view with
+   * isTeamDefault=true over a team demotes that team's previous default in
+   * the same transaction. Personal views (teamId null) carry no default.
+   */
   create(input: CreateViewInput): Promise<View>;
   /**
    * When the patch sets isTeamDefault=true, the previous team default is
@@ -91,7 +96,25 @@ export const createViewRepo = (db: Db): ViewRepo => {
         display: input.display,
         isTeamDefault: input.isTeamDefault ?? false,
       };
-      await db.insert(views).values(values);
+      await db.transaction(async (tx) => {
+        await tx.insert(views).values(values);
+        // the one-team-default invariant holds on the CREATE path too: a team
+        // default created over an existing one demotes it in the same
+        // transaction (mirrors update below) — a concurrent reader never sees
+        // zero or two defaults. Personal views (teamId null) are untouched.
+        if (values.isTeamDefault && values.teamId !== null) {
+          await tx
+            .update(views)
+            .set({ isTeamDefault: false })
+            .where(
+              and(
+                eq(views.teamId, values.teamId),
+                eq(views.isTeamDefault, true),
+                ne(views.id, values.id),
+              ),
+            );
+        }
+      });
       return toDomain(values);
     },
 

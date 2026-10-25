@@ -127,12 +127,15 @@ export const resetDb = async (db: Db): Promise<void> => {
  */
 export const createSharedTestDb = async (): Promise<{
   db: PgliteDatabase;
+  /** The raw pglite client behind `db` — query-count guards wrap its .query. */
+  sql: PGlite;
   reset: () => Promise<void>;
   close: () => Promise<void>;
 }> => {
   const shared = await createTestDb();
   return {
     db: shared.db,
+    sql: shared.sql,
     reset: () => resetDb(shared.db),
     close: shared.close,
   };
