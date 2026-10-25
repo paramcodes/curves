@@ -42,9 +42,6 @@
     },
     "packages/ui": {
       "entry": "src/entry.ts"
-    },
-    ".": {
-      "ignoreBinaries": ["tsx"]
     }
   }
 }
