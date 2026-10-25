@@ -1,10 +1,10 @@
 # AGENTS.md — start here
 
-Curves: a Linear clone built agent-first. **Status: Phase 1 complete — domain model + data layer live (84 domain tests, 36 integration tests, deterministic seed); next: [Phase 2](docs/phases/02-api-auth.md) (API & auth).**
+Curves: a Linear clone built agent-first. **Status: Phase 2 complete — full typed API (12 tRPC routers, better-auth, authz-gated mutations) over the Phase 1 domain/data layer; next: [Phase 3](docs/phases/03-app-shell.md) (app shell & design system — the first user-visible work).**
 
 1. Read [PLAN.md](PLAN.md) — master plan: stack, layout, global rules, phase index.
 2. Your work belongs to exactly one phase: `docs/phases/`.
-3. Phase 0 and Phase 1 are complete (see the [phase-1 exit report](docs/phases/reports/phase-1-exit.md), incl. recorded deferrals: 5 repos → Phase 2 first slice). Do not start a phase before the previous one's acceptance criteria pass.
+3. Phases 0–2 are complete (see the [phase-2 exit report](docs/phases/reports/phase-2-exit.md), incl. recorded deferrals: password reset + invites → Phase 3). Do not start a phase before the previous one's acceptance criteria pass.
 
 ## Repo contract (summary — PLAN.md is authoritative)
 
