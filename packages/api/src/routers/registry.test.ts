@@ -28,22 +28,27 @@ import { mutations as usersMutations, usersRouter } from "./users";
 import { mutations as viewsMutations, viewsRouter } from "./views";
 
 /**
- * The mutation-registry reflection test (phase-2 task 4).
+ * The mutation-registry reflection test (phase-2 task 4, hardened in the
+ * phase-2 review-fix slice).
  *
  * Contract every router module must satisfy:
- *   1. Mutations are built ONLY through `mutation(...)` from trpc.ts — the
- *      walker below fails on any mutation procedure missing the tag, so a
- *      raw `.mutation()` call cannot ship.
+ *   1. Mutations are built ONLY through `mutation({input, authorize, resolve})`
+ *      from trpc.ts — the walker below fails on any mutation procedure missing
+ *      the tag, so a raw builder call cannot ship.
  *   2. Each router exports a `mutations` list of its mutation keys; the test
  *      cross-checks it against the actual tagged procedures in both
  *      directions.
  *   3. Every router mounted in root.ts is registered in `mounts` below — a
  *      router added to root but not to `mounts` fails the coverage check, so
  *      it cannot silently escape rules 1 and 2.
+ *   4. (strike-2) No router SOURCE carries the raw builder call at all —
+ *      the scan test below fails any non-test router file containing the
+ *      text `.mutation(`.
  *
- * A deliberate bite (raw `.mutation()` in health.ts) was run once and failed
- * this file before being removed — the transcript line lives in the slice-4
- * report (docs/phases/reports/).
+ * The bite is REAL and captured verbatim: a raw `.mutation(` injected into
+ * health.ts failed rules 1, 2, and 4 simultaneously — see
+ * docs/phases/reports/phase-2-registry-bite.md for the full transcript
+ * (this supersedes the slice-4 report's phantom evidence pointer).
  */
 
 // Procedures are (async) functions in v11, not plain objects — verified
@@ -193,7 +198,12 @@ describe("mutation registry", () => {
       db: {} as never,
       auth: {} as never,
       session: {} as never,
-      user: { id: userId("user_probe"), name: "Probe", email: "probe@curves.dev", avatarUrl: null },
+      user: {
+        id: userId("user_probe"),
+        name: "Probe",
+        email: "probe@curves.dev",
+        avatarUrl: null,
+      },
     });
 
     await expect(caller.touch({ value: "ok" })).resolves.toBe("ok");
