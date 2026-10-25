@@ -91,7 +91,11 @@ export const createTestContext = async (
   if (!setCookie)
     throw new Error("createTestContext: expected a Set-Cookie on the sign-in response");
 
-  const headers = new Headers({ cookie: setCookie.split(";")[0] });
+  const cookie = setCookie.split(";")[0];
+  if (cookie === undefined || cookie === "") {
+    throw new Error("createTestContext: Set-Cookie had an empty cookie pair");
+  }
+  const headers = new Headers({ cookie });
   const context = await createContext({ db, auth, headers });
   if (!context.user)
     throw new Error("createTestContext: session did not resolve after sign-up/sign-in");

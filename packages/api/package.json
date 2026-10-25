@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },
@@ -19,5 +20,9 @@
     "@trpc/server": "^11.19.0",
     "better-auth": "^1.7.12",
     "zod": "^4.6.7"
+  },
+  "exports": {
+    ".": "./src/entry.ts",
+    "./root": "./src/root.ts"
   }
 }

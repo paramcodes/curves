@@ -1,3 +1,4 @@
+import type { inferRouterOutputs } from "@trpc/server";
 import { commentsRouter } from "./routers/comments";
 import { cyclesRouter } from "./routers/cycles";
 import { healthRouter } from "./routers/health";
@@ -34,3 +35,6 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+/** Inferred output types of every procedure — the contract web consumes (type-only). */
+export type RouterOutputs = inferRouterOutputs<AppRouter>;

@@ -51,4 +51,17 @@ if (wiring.status !== 0) {
   fail("db boot wiring failed (migrations + repos + rollover job did not construct)");
 }
 
-console.log("boot-check: OK (entries + db wiring)");
+// Phase 2: construct the full appRouter and drive one procedure through a caller.
+const apiWiring = spawnSync(
+  "pnpm",
+  ["--filter", "@curves/api", "exec", "tsx", "src/boot-wiring.ts"],
+  {
+    cwd: root,
+    stdio: "inherit",
+  },
+);
+if (apiWiring.status !== 0) {
+  fail("api boot wiring failed (appRouter did not construct or health.check failed)");
+}
+
+console.log("boot-check: OK (entries + db wiring + appRouter)");

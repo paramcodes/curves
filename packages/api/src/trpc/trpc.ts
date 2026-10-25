@@ -49,6 +49,9 @@ export const protectedProcedure = publicProcedure.use(requireUser);
 
 export const router = t.router;
 
+/** Caller factory for server-side invocation (boot check, tests). */
+export const createCallerFactory = t.createCallerFactory;
+
 /**
  * Mutation-registry discipline: `mutation(...)` is the ONLY sanctioned way to
  * build a mutation procedure. It tags the built procedure with a symbol, and
