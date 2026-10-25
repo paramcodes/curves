@@ -8,6 +8,9 @@ import { mutation, protectedProcedure, router } from "../trpc/trpc";
  * Teams: workspace-level identity. List/byKey are signed-in reads; create is
  * workspace-scoped (any signed-in user in v1 — assertCanAct is still the
  * single seam, so a finer workspace role slots in without touching routers).
+ * Create writes the creator's team_members row (role admin) in the same
+ * transaction (repo concern, teams.repo) — a team with no admin member would
+ * reject every team-scoped action, so the creator can act on it immediately.
  * Team settings/membership management (update, members) are later-slice
  * mutations and must go through the same mutation() + assertCanAct pattern.
  */
@@ -39,7 +42,7 @@ export const teamsRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         await assertCanAct(ctx, "create", { workspace: true });
-        return createTeamRepo(ctx.db).create(input);
+        return createTeamRepo(ctx.db).create({ ...input, creatorId: ctx.user.id });
       }),
   ),
 });

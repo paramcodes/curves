@@ -3,10 +3,13 @@ import {
   createIssueRepo,
   type IssuePatch,
   type IssueRepo,
+  type LifecycleStamps,
   lastIssueOrder,
 } from "@curves/db/repos/issue.repo";
+import { createWorkflowStateRepo } from "@curves/db/repos/state.repo";
 import type { ActivityVerb } from "@curves/domain/activities/activity.types";
 import { NotFoundError } from "@curves/domain/core/errors";
+import type { StateId } from "@curves/domain/core/ids";
 import {
   cycleId,
   issueId,
@@ -19,6 +22,7 @@ import {
 } from "@curves/domain/core/ids";
 import type { Issue, OrderKey, Priority } from "@curves/domain/issues/issue.types";
 import { orderBetween } from "@curves/domain/issues/ordering";
+import { applyTransition } from "@curves/domain/issues/state-machine";
 import { z } from "zod";
 import { assertCanAct } from "../authz";
 import { listProcedure } from "../list";
@@ -38,11 +42,14 @@ import { mutation, protectedProcedure, router } from "../trpc/trpc";
  * archive/unarchive, and description/estimate/parent/milestone edits.
  * Extending the taxonomy is a domain decision, not a router one.
  *
- * State transitions: update/move set stateId through the repo patch — the
- * state machine (applyTransition) is not consulted and lifecycle stamps are
- * NOT written. The repo patch path has no stamp plumbing yet; wiring
- * applyTransition into state changes is a follow-up (it needs the target
- * state's category — a repo-level concern).
+ * State transitions: every stateId change (update and move) goes through the
+ * DOMAIN state machine — applyTransition validates the category transition
+ * (illegal ones throw TransitionNotAllowedError → BAD_REQUEST via the
+ * existing map; note same-category moves between two states are also illegal
+ * per canTransition) and computes the sticky lifecycle stamps, which the
+ * router passes through to the repo verbatim. The repo never derives stamps
+ * itself. Wall clock: `new Date()` is read HERE, in the router, and handed to
+ * the pure domain explicitly — routers are the only impure layer.
  */
 
 type Ctx = CurvesContext & { user: SafeUser };
@@ -96,6 +103,39 @@ const record = async (
     entityId,
     payload,
   });
+};
+
+/**
+ * The ONLY path a state change takes: validate the category transition and
+ * compute the sticky lifecycle stamps via the domain state machine, producing
+ * the patch fragment to persist alongside the stateId. Both state rows are
+ * loaded (the to-state 404s if it does not exist; a from-state missing on a
+ * persisted issue is corrupt data and 404s too); applyTransition additionally
+ * rejects same-team violations and illegal/same-category transitions.
+ * `now` comes from the router's wall clock — domain stays pure.
+ */
+const transitionStamps = async (
+  ctx: Ctx,
+  before: Issue,
+  toStateId: StateId,
+  now: Date,
+): Promise<LifecycleStamps> => {
+  const states = createWorkflowStateRepo(ctx.db);
+  const fromState = await states.byId(before.stateId);
+  if (fromState === null) {
+    throw new NotFoundError(`state ${before.stateId} not found`);
+  }
+  const toState = await states.byId(toStateId);
+  if (toState === null) {
+    throw new NotFoundError(`state ${toStateId} not found`);
+  }
+  const stamped = applyTransition(before, fromState, toState, now);
+  return {
+    startedAt: stamped.startedAt,
+    completedAt: stamped.completedAt,
+    canceledAt: stamped.canceledAt,
+    updatedAt: stamped.updatedAt,
+  };
 };
 
 export const issuesRouter = router({
@@ -206,10 +246,14 @@ export const issuesRouter = router({
           });
         }
         changed("description", input.patch.description, before.description);
-        if (changed("stateId", input.patch.stateId, before.stateId)) {
+        const nextStateId = input.patch.stateId;
+        if (nextStateId !== undefined && nextStateId !== before.stateId) {
+          patch.stateId = nextStateId;
+          // Router wall clock — handed to the pure state machine explicitly.
+          Object.assign(patch, await transitionStamps(ctx, before, nextStateId, new Date()));
           trail.push({
             verb: "state_changed",
-            payload: changedTo(before.stateId, input.patch.stateId),
+            payload: changedTo(before.stateId, nextStateId),
           });
         }
         if (changed("priority", input.patch.priority, before.priority)) {
@@ -260,7 +304,13 @@ export const issuesRouter = router({
       .mutation(async ({ ctx, input }) => {
         const repo = createIssueRepo(ctx.db);
         const before = await loadForMutation(ctx, repo, input.id);
-        const after = await repo.move(input.id, input.order, input.toStateId);
+        // A state change goes through the domain state machine first; the
+        // stamped patch persists in the SAME update as the reorder.
+        const stamps =
+          input.toStateId !== undefined && input.toStateId !== before.stateId
+            ? await transitionStamps(ctx, before, input.toStateId, new Date())
+            : undefined;
+        const after = await repo.move(input.id, input.order, input.toStateId, stamps);
         if (input.toStateId !== undefined && input.toStateId !== before.stateId) {
           await record(ctx, "state_changed", after.id, { from: before.stateId, to: after.stateId });
         }

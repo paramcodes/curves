@@ -58,8 +58,27 @@ export interface IssuePatch {
   projectId?: ProjectId | null;
   milestoneId?: MilestoneId | null;
   cycleId?: CycleId | null;
+  /**
+   * Lifecycle stamps are CALLER-COMPUTED: the repo persists them verbatim and
+   * never derives them. The only legitimate producer is the domain's
+   * applyTransition (packages/domain/issues/state-machine.ts), invoked by the
+   * API router when stateId changes — handing the stamped patch straight
+   * through. There is deliberately no repo-side shortcut that sets stateId
+   * without the caller having gone through the state machine.
+   */
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  canceledAt?: Date | null;
   /** Last-write-wins stamp; defaults to now when omitted. */
   updatedAt?: Date;
+}
+
+/** The full stamp set applyTransition produces; move() persists it atomically with the reorder. */
+export interface LifecycleStamps {
+  startedAt: Date | null;
+  completedAt: Date | null;
+  canceledAt: Date | null;
+  updatedAt: Date;
 }
 
 /**
@@ -76,7 +95,13 @@ export interface IssueRepo {
   list(query: ListQuery): Promise<ListResult<Issue>>;
   create(input: CreateIssueInput, order: OrderKey): Promise<Issue>;
   update(id: IssueId, patch: IssuePatch): Promise<Issue>;
-  move(id: IssueId, order: OrderKey, toStateId?: StateId): Promise<Issue>;
+  /**
+   * Reorder, optionally with a state change. When `toStateId` changes the
+   * state, `stamps` MUST be the applyTransition output for that transition —
+   * the repo neither computes nor validates stamps (see IssuePatch); it
+   * persists them in the SAME update so order + state + stamps land together.
+   */
+  move(id: IssueId, order: OrderKey, toStateId?: StateId, stamps?: LifecycleStamps): Promise<Issue>;
   setLabels(id: IssueId, labelIds: LabelId[]): Promise<Issue>;
   archive(id: IssueId, at: Date | null): Promise<Issue>;
   relations(id: IssueId): Promise<IssueRelation[]>;
@@ -160,6 +185,9 @@ const PATCH_KEYS = [
   "projectId",
   "milestoneId",
   "cycleId",
+  "startedAt",
+  "completedAt",
+  "canceledAt",
 ] as const satisfies readonly (keyof IssuePatch)[];
 
 const takeDefined = <K extends keyof IssuePatch & keyof typeof issues.$inferInsert>(
@@ -383,12 +411,20 @@ export const createIssueRepo = (db: Db): IssueRepo => {
 
     update: async (id, patch) => updateReturning(patchToSet(patch), id),
 
-    move: async (id, order, toStateId) => {
+    move: async (id, order, toStateId, stamps) => {
       // validates the key is a finite number serialization
       orderKeyNumber(order);
-      const set: Partial<typeof issues.$inferInsert> = { order, updatedAt: new Date() };
+      const set: Partial<typeof issues.$inferInsert> = {
+        order,
+        updatedAt: stamps?.updatedAt ?? new Date(),
+      };
       if (toStateId !== undefined) {
         set.stateId = toStateId;
+      }
+      if (stamps !== undefined) {
+        set.startedAt = stamps.startedAt;
+        set.completedAt = stamps.completedAt;
+        set.canceledAt = stamps.canceledAt;
       }
       return updateReturning(set, id);
     },

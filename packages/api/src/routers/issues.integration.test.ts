@@ -31,6 +31,7 @@ const TEAM = teamIdOf("team_router");
 const ST_BACKLOG = stateIdOf("st_router_backlog");
 const ST_DOING = stateIdOf("st_router_doing");
 const ST_DONE = stateIdOf("st_router_done");
+const ST_TODO = stateIdOf("st_router_todo");
 const STATES = [ST_BACKLOG, ST_DOING, ST_DONE];
 const CYCLE = cycleId("cyc_router_1");
 
@@ -38,6 +39,7 @@ const stateRows = [
   { id: ST_BACKLOG, teamId: TEAM, name: "Backlog", category: "backlog" as const, position: 0 },
   { id: ST_DOING, teamId: TEAM, name: "In Progress", category: "started" as const, position: 1 },
   { id: ST_DONE, teamId: TEAM, name: "Done", category: "completed" as const, position: 2 },
+  { id: ST_TODO, teamId: TEAM, name: "To Do", category: "unstarted" as const, position: 3 },
 ];
 
 /** Indexed access is modulo the array length at every call site, so this cast is total (the seed's pattern). */
@@ -195,7 +197,7 @@ describe("issue mutations write the right activity verbs", () => {
     });
   });
 
-  it("move changes the order key; with toStateId it also changes state and records state_changed", async () => {
+  it("move changes the order key; with toStateId it also changes state, stamps lifecycle dates, and records state_changed", async () => {
     const { member } = await memberAndOutsider();
     const caller = callerFor(member.context);
     const issue = await caller.issues.create({
@@ -207,15 +209,36 @@ describe("issue mutations write the right activity verbs", () => {
 
     const reordered = await caller.issues.move({ id: issue.id, order: "42.5" });
     expect(reordered.order).toBe("42.5");
+    // pure reorder: no state change, no stamps, no state_changed entry
+    expect(reordered.startedAt).toBeNull();
     expect(
       (await createActivityRepo(shared.db).byEntity("issue", issue.id)).map((a) => a.verb),
     ).toEqual(["issue_created"]);
 
+    // backlog → unstarted → started → completed, the legal path: startedAt
+    // stamped on entering started, completedAt on entering completed
+    const queued = await caller.issues.move({ id: issue.id, order: "42.6", toStateId: ST_TODO });
+    expect(queued.stateId).toBe(ST_TODO);
+    expect(queued.startedAt).toBeNull();
+    const started = await caller.issues.move({ id: issue.id, order: "42.7", toStateId: ST_DOING });
+    expect(started.stateId).toBe(ST_DOING);
+    expect(started.startedAt).toBeInstanceOf(Date);
     const moved = await caller.issues.move({ id: issue.id, order: "43", toStateId: ST_DONE });
     expect(moved.stateId).toBe(ST_DONE);
+    expect(moved.completedAt).toBeInstanceOf(Date);
     const trail = await createActivityRepo(shared.db).byEntity("issue", issue.id);
-    expect(nth(trail, 0).verb).toBe("state_changed");
-    expect(nth(trail, 0).payload).toEqual({ from: ST_BACKLOG, to: ST_DONE });
+    // newest-first order with same-millisecond ties on random ids — compare as
+    // a multiset (the round-trip test's convention) and locate payloads
+    expect(trail.map((a) => a.verb).sort()).toEqual(
+      ["issue_created", "state_changed", "state_changed", "state_changed"].sort(),
+    );
+    expect(trail.filter((a) => a.verb === "state_changed").map((a) => a.payload)).toEqual(
+      expect.arrayContaining([
+        { from: ST_BACKLOG, to: ST_TODO },
+        { from: ST_TODO, to: ST_DOING },
+        { from: ST_DOING, to: ST_DONE },
+      ]),
+    );
   });
 
   it("setLabels diffs old vs new into label_added / label_removed entries", async () => {
@@ -259,6 +282,80 @@ describe("issue mutations write the right activity verbs", () => {
     expect(archived.archivedAt).toBeInstanceOf(Date);
     const unarchived = await caller.issues.archive({ id: issue.id, archived: false });
     expect(unarchived.archivedAt).toBeNull();
+  });
+});
+
+describe("state changes go through the domain state machine", () => {
+  it("update to a started-category state stamps startedAt (backlog → unstarted → started)", async () => {
+    const { member } = await memberAndOutsider();
+    const caller = callerFor(member.context);
+    const issue = await caller.issues.create({
+      title: "Starter",
+      teamId: TEAM,
+      stateId: ST_BACKLOG,
+      priority: 0,
+    });
+
+    const queued = await caller.issues.update({ id: issue.id, patch: { stateId: ST_TODO } });
+    expect(queued.stateId).toBe(ST_TODO);
+    // backlog/unstarted are holding pens — entering them stamps nothing
+    expect(queued.startedAt).toBeNull();
+
+    const started = await caller.issues.update({ id: issue.id, patch: { stateId: ST_DOING } });
+    expect(started.stateId).toBe(ST_DOING);
+    expect(started.startedAt).toBeInstanceOf(Date);
+    expect(started.completedAt).toBeNull();
+    expect(started.canceledAt).toBeNull();
+
+    const trail = await createActivityRepo(shared.db).byEntity("issue", issue.id);
+    expect(trail.map((a) => a.verb).sort()).toEqual(
+      ["issue_created", "state_changed", "state_changed"].sort(),
+    );
+  });
+
+  it("completed → started reopen clears completedAt and restamps startedAt", async () => {
+    const { member } = await memberAndOutsider();
+    const caller = callerFor(member.context);
+    const issue = await caller.issues.create({
+      title: "Reopenable",
+      teamId: TEAM,
+      stateId: ST_BACKLOG,
+      priority: 0,
+    });
+    await caller.issues.update({ id: issue.id, patch: { stateId: ST_TODO } });
+    await caller.issues.update({ id: issue.id, patch: { stateId: ST_DOING } });
+    const done = await caller.issues.update({ id: issue.id, patch: { stateId: ST_DONE } });
+    expect(done.completedAt).toBeInstanceOf(Date);
+
+    const reopened = await caller.issues.update({ id: issue.id, patch: { stateId: ST_DOING } });
+    expect(reopened.stateId).toBe(ST_DOING);
+    // the one clearing transition: re-entering started resets completedAt
+    expect(reopened.completedAt).toBeNull();
+    expect(reopened.startedAt).toBeInstanceOf(Date);
+  });
+
+  it("illegal completed → unstarted is BAD_REQUEST carrying the domain message", async () => {
+    const { member } = await memberAndOutsider();
+    const caller = callerFor(member.context);
+    const issue = await caller.issues.create({
+      title: "Blocked",
+      teamId: TEAM,
+      stateId: ST_BACKLOG,
+      priority: 0,
+    });
+    // the legal path to completed runs through started (unstarted → completed
+    // is itself illegal)
+    await caller.issues.update({ id: issue.id, patch: { stateId: ST_TODO } });
+    await caller.issues.update({ id: issue.id, patch: { stateId: ST_DOING } });
+    await caller.issues.update({ id: issue.id, patch: { stateId: ST_DONE } });
+
+    const err = await caller.issues
+      .update({ id: issue.id, patch: { stateId: ST_TODO } })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TRPCError);
+    expect((err as TRPCError).code).toBe("BAD_REQUEST");
+    // domain message rides through the one mapping table (transition_not_allowed)
+    expect((err as TRPCError).message).toBe("illegal transition completed -> unstarted");
   });
 });
 
@@ -357,7 +454,7 @@ describe("list-vs-evaluate oracle through the API layer", () => {
 });
 
 describe("teams/labels/states through the API", () => {
-  it("createTeam (workspace scope) → byKey; duplicate key is CONFLICT; labels create/rename/remove; states byTeam", async () => {
+  it("createTeam (workspace scope) → byKey; duplicate key is CONFLICT; creator joins as admin; labels create/rename/remove; states byTeam", async () => {
     const { member, outsider } = await memberAndOutsider();
     const caller = callerFor(member.context);
 
@@ -370,10 +467,30 @@ describe("teams/labels/states through the API", () => {
       code: "CONFLICT",
     });
 
-    // NOTE: createTeam intentionally adds no membership rows yet — team setup
-    // (invites/members) is a later slice. Labels below therefore act on TEAM,
-    // where the test member IS a member; a fresh API-created team would
-    // reject everything until a membership row exists (documented gap).
+    // createTeam writes the creator's admin membership in the same
+    // transaction, so team-scoped actions work on the fresh team immediately
+    // (one workflow state row seeded directly — the workflow editor is Phase 5)
+    const freshState = stateIdOf("st_ops_backlog");
+    await shared.db.insert(states).values({
+      id: freshState,
+      teamId: team.id,
+      name: "Backlog",
+      category: "backlog",
+      position: 0,
+    });
+    const freshIssue = await caller.issues.create({
+      title: "day-one issue",
+      teamId: team.id,
+      stateId: freshState,
+      priority: 1,
+    });
+    expect(freshIssue.teamId).toBe(team.id);
+    expect(freshIssue.number).toBe(1);
+    // and a non-member still cannot act on it
+    await expect(
+      callerFor(outsider.context).issues.update({ id: freshIssue.id, patch: { title: "hijack" } }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /not a member/i });
+
     const label = await caller.labels.create({ teamId: TEAM, name: "bug", color: "#ff0000" });
     await expect(caller.labels.byTeam({ teamId: TEAM })).resolves.toEqual([label]);
     await expect(caller.labels.update({ id: label.id, name: "defect" })).resolves.toMatchObject({
@@ -382,7 +499,7 @@ describe("teams/labels/states through the API", () => {
     await expect(caller.labels.remove({ id: label.id })).resolves.toMatchObject({ id: label.id });
     await expect(caller.labels.byTeam({ teamId: TEAM })).resolves.toEqual([]);
 
-    await expect(caller.states.byTeam({ teamId: TEAM })).resolves.toHaveLength(3);
+    await expect(caller.states.byTeam({ teamId: TEAM })).resolves.toHaveLength(4);
 
     // outsider (signed in, not a member) cannot create a label in the team
     const outsiderCaller = callerFor(outsider.context);

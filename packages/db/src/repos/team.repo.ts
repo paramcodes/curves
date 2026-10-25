@@ -17,6 +17,13 @@ export interface CreateTeamInput {
   /** Short human-facing code ("ENG") used in issue identifiers; unique. */
   key: string;
   name: string;
+  /**
+   * When set, the creator's team_members row (role "admin") is written in the
+   * SAME transaction — a team without at least one admin member rejects every
+   * team-scoped action, so create-without-membership would produce an
+   * unusable team. Omitted only by legacy direct-seed callers.
+   */
+  creatorId?: UserId;
 }
 
 export interface TeamRepo {
@@ -76,14 +83,23 @@ export const createTeamRepo = (db: Db): TeamRepo => {
         key: input.key,
         name: input.name,
       };
-      try {
-        await db.insert(teams).values(values);
-      } catch (err) {
-        if (isUniqueViolation(err)) {
-          throw new DuplicateError(`team key "${input.key}" is already taken`);
+      await db.transaction(async (tx) => {
+        try {
+          await tx.insert(teams).values(values);
+        } catch (err) {
+          if (isUniqueViolation(err)) {
+            throw new DuplicateError(`team key "${input.key}" is already taken`);
+          }
+          throw err;
         }
-        throw err;
-      }
+        if (input.creatorId !== undefined) {
+          await tx.insert(teamMembers).values({
+            teamId: values.id,
+            userId: input.creatorId,
+            role: "admin",
+          });
+        }
+      });
       return toDomain(values);
     },
   };
