@@ -2,10 +2,19 @@
   "$schema": "https://unpkg.com/knip@6.42.1/schema.json",
   "workspaces": {
     "apps/web": {
-      "entry": "src/entry.ts"
+      "entry": ["src/entry.ts", "src/api-contract-probe.ts"]
     },
     "packages/api": {
-      "entry": ["src/entry.ts", "src/auth/*.ts", "src/trpc/*.ts", "src/authz.ts", "src/root.ts"]
+      "entry": [
+        "src/entry.ts",
+        "src/auth/*.ts",
+        "src/trpc/*.ts",
+        "src/authz.ts",
+        "src/root.ts",
+        "src/list.ts",
+        "src/routers/*.ts",
+        "src/boot-wiring.ts"
+      ]
     },
     "packages/db": {
       "entry": [
