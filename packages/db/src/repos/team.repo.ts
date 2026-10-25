@@ -1,6 +1,7 @@
-import type { TeamId } from "@curves/domain/core/ids";
-import type { Team } from "@curves/domain/teams/team.types";
-import { asc, eq } from "drizzle-orm";
+import type { TeamId, UserId } from "@curves/domain/core/ids";
+import type { Team, TeamRole } from "@curves/domain/teams/team.types";
+import { and, asc, eq } from "drizzle-orm";
+import { teamMembers } from "../schema/team_members";
 import { teams } from "../schema/teams";
 import type { Db } from "./issue.repo";
 
@@ -13,6 +14,22 @@ export interface TeamRepo {
   byKey(key: string): Promise<Team | null>;
   list(): Promise<Team[]>;
 }
+
+/**
+ * The authz lookup (phase 2, `assertCanAct` in packages/api): the caller's
+ * role within one team, or null when not a member. Lives in db, not api, so
+ * SQL building never crosses the api→db boundary (api cannot import
+ * drizzle-orm — its drizzle copy is type-incompatible with db's, the
+ * same nominal-type hazard test-db.ts documents).
+ */
+export const teamRoleFor = async (db: Db, team: TeamId, user: UserId): Promise<TeamRole | null> => {
+  const rows = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.teamId, team), eq(teamMembers.userId, user)))
+    .limit(1);
+  return rows[0]?.role ?? null;
+};
 
 /**
  * Teams are identity rows with no storage-side lifecycle of their own —

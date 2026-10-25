@@ -24,6 +24,7 @@
   },
   "exports": {
     "./test-db": "./src/test-db.ts",
-    "./schema/*": "./src/schema/*.ts"
+    "./schema/*": "./src/schema/*.ts",
+    "./repos/*": "./src/repos/*.ts"
   }
 }

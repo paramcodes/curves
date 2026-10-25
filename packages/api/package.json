@@ -15,6 +15,9 @@
   },
   "dependencies": {
     "@curves/db": "workspace:*",
-    "better-auth": "^1.7.12"
+    "@curves/domain": "workspace:*",
+    "@trpc/server": "^11.19.0",
+    "better-auth": "^1.7.12",
+    "zod": "^4.6.7"
   }
 }

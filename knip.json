@@ -5,7 +5,7 @@
       "entry": "src/entry.ts"
     },
     "packages/api": {
-      "entry": ["src/entry.ts", "src/auth/*.ts"]
+      "entry": ["src/entry.ts", "src/auth/*.ts", "src/trpc/*.ts", "src/authz.ts", "src/root.ts"]
     },
     "packages/db": {
       "entry": [
