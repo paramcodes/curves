@@ -27,24 +27,22 @@ export const teamsRouter = router({
       return team;
     }),
 
-  create: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          // Short human-facing code used in issue identifiers ("ENG-101")
-          key: z
-            .string()
-            .min(1)
-            .max(10)
-            .regex(/^[A-Z][A-Z0-9]*$/, "team key must be uppercase letters/digits, e.g. ENG"),
-          name: z.string().min(1).max(100),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        await assertCanAct(ctx, "create", { workspace: true });
-        return createTeamRepo(ctx.db).create({ ...input, creatorId: ctx.user.id });
-      }),
-  ),
+  create: mutation({
+    input: z.object({
+      // Short human-facing code used in issue identifiers ("ENG-101")
+      key: z
+        .string()
+        .min(1)
+        .max(10)
+        .regex(/^[A-Z][A-Z0-9]*$/, "team key must be uppercase letters/digits, e.g. ENG"),
+      name: z.string().min(1).max(100),
+    }),
+    // Workspace scope: any signed-in user in v1 — a finer workspace role
+    // tiers in HERE at the single authz seam without touching resolvers.
+    authorize: (ctx) => assertCanAct(ctx, "create", { workspace: true }),
+    resolve: ({ ctx, input }) =>
+      createTeamRepo(ctx.db).create({ ...input, creatorId: ctx.user.id }),
+  }),
 });
 
 /** Registry list: mutation procedure keys in this router (registry-test contract). */

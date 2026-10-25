@@ -40,18 +40,17 @@ const testRouter = router({
   invalid: publicProcedure.query(() => {
     throw new ValidationError("that input is not acceptable");
   }),
-  createTeamThing: mutation(
-    protectedProcedure.input(z.object({ teamId: z.string() })).mutation(async ({ ctx, input }) => {
-      await assertCanAct(ctx, "read", { teamId: teamId(input.teamId) });
-      return { ok: true as const, by: ctx.user.id };
-    }),
-  ),
-  adminOnly: mutation(
-    protectedProcedure.input(z.object({ teamId: z.string() })).mutation(async ({ ctx, input }) => {
-      await assertCanAct(ctx, "manage_workflow", { teamId: teamId(input.teamId) });
-      return { ok: true as const };
-    }),
-  ),
+  createTeamThing: mutation({
+    input: z.object({ teamId: z.string() }),
+    authorize: (ctx, input) => assertCanAct(ctx, "read", { teamId: teamId(input.teamId) }),
+    resolve: ({ ctx }) => Promise.resolve({ ok: true as const, by: ctx.user.id }),
+  }),
+  adminOnly: mutation({
+    input: z.object({ teamId: z.string() }),
+    authorize: (ctx, input) =>
+      assertCanAct(ctx, "manage_workflow", { teamId: teamId(input.teamId) }),
+    resolve: () => Promise.resolve({ ok: true as const }),
+  }),
 });
 
 const seedTeam = async (

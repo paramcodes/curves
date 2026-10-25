@@ -33,51 +33,46 @@ export const projectsRouter = router({
       return project;
     }),
 
-  create: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          name: z.string().min(1).max(255),
-          description: z.string().max(10_000).default(""),
-          leadId: z.string().min(1).transform(userId).nullish(),
-          targetDate: z.coerce.date().nullish(),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        await assertCanAct(ctx, "create", { workspace: true });
-        return createProjectRepo(ctx.db).create({
-          name: input.name,
-          description: input.description,
-          leadId: input.leadId ?? null,
-          targetDate: input.targetDate ?? null,
-        });
+  create: mutation({
+    input: z.object({
+      name: z.string().min(1).max(255),
+      description: z.string().max(10_000).default(""),
+      leadId: z.string().min(1).transform(userId).nullish(),
+      targetDate: z.coerce.date().nullish(),
+    }),
+    // Workspace scope in v1 — a finer workspace role tiers in at the authz
+    // seam without touching this resolver.
+    authorize: (ctx) => assertCanAct(ctx, "create", { workspace: true }),
+    resolve: ({ ctx, input }) =>
+      createProjectRepo(ctx.db).create({
+        name: input.name,
+        description: input.description,
+        leadId: input.leadId ?? null,
+        targetDate: input.targetDate ?? null,
       }),
-  ),
+  }),
 
-  update: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          id: z.string().min(1).transform(projectId),
-          patch: z.object({
-            name: z.string().min(1).max(255).optional(),
-            description: z.string().max(10_000).optional(),
-            leadId: z.string().min(1).transform(userId).nullish(),
-            targetDate: z.coerce.date().nullish(),
-          }),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        await assertCanAct(ctx, "update", { workspace: true });
-        const patch: Parameters<ReturnType<typeof createProjectRepo>["update"]>[1] = {};
-        if (input.patch.name !== undefined) patch.name = input.patch.name;
-        if (input.patch.description !== undefined) patch.description = input.patch.description;
-        if (input.patch.leadId !== undefined) patch.leadId = input.patch.leadId;
-        if (input.patch.targetDate !== undefined) patch.targetDate = input.patch.targetDate;
-        // repo.update 404s (NotFoundError → NOT_FOUND) when the project is gone
-        return createProjectRepo(ctx.db).update(input.id, patch);
+  update: mutation({
+    input: z.object({
+      id: z.string().min(1).transform(projectId),
+      patch: z.object({
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().max(10_000).optional(),
+        leadId: z.string().min(1).transform(userId).nullish(),
+        targetDate: z.coerce.date().nullish(),
       }),
-  ),
+    }),
+    authorize: (ctx) => assertCanAct(ctx, "update", { workspace: true }),
+    resolve: ({ ctx, input }) => {
+      const patch: Parameters<ReturnType<typeof createProjectRepo>["update"]>[1] = {};
+      if (input.patch.name !== undefined) patch.name = input.patch.name;
+      if (input.patch.description !== undefined) patch.description = input.patch.description;
+      if (input.patch.leadId !== undefined) patch.leadId = input.patch.leadId;
+      if (input.patch.targetDate !== undefined) patch.targetDate = input.patch.targetDate;
+      // repo.update 404s (NotFoundError → NOT_FOUND) when the project is gone
+      return createProjectRepo(ctx.db).update(input.id, patch);
+    },
+  }),
 });
 
 /** Registry list: mutation procedure keys in this router (registry-test contract). */

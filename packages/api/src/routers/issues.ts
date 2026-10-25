@@ -26,14 +26,14 @@ import { applyTransition } from "@curves/domain/issues/state-machine";
 import { z } from "zod";
 import { assertCanAct } from "../authz";
 import { listProcedure } from "../list";
-import type { CurvesContext, SafeUser } from "../trpc/context";
-import { mutation, protectedProcedure, router } from "../trpc/trpc";
+import { type MutationCtx, mutation, protectedProcedure, router } from "../trpc/trpc";
 
 /**
  * The first real router (phase-2 slice 5a) — the pattern every 5b router
- * copies: thin resolvers that validate (zod) → authorize (assertCanAct — the
- * only authz seam) → call repo/domain → map. Business logic belongs in
- * packages/domain or the repos, never here.
+ * copies: thin procedures that validate (zod input) → authorize (the
+ * mutation()'s required `authorize` gate → assertCanAct, the only authz seam)
+ * → call repo/domain → map. Business logic belongs in packages/domain or the
+ * repos, never here.
  *
  * Activity trail: every mutation records one activity per changed field that
  * the domain taxonomy has a verb for (activity.types.ts). Three changes have
@@ -47,12 +47,13 @@ import { mutation, protectedProcedure, router } from "../trpc/trpc";
  * (illegal ones throw TransitionNotAllowedError → BAD_REQUEST via the
  * existing map; note same-category moves between two states are also illegal
  * per canTransition) and computes the sticky lifecycle stamps, which the
- * router passes through to the repo verbatim. The repo never derives stamps
- * itself. Wall clock: `new Date()` is read HERE, in the router, and handed to
- * the pure domain explicitly — routers are the only impure layer.
+ * router passes through to the repo verbatim. The repo REFUSES a state change
+ * without the stamp set (S5 guard), so no patch path can bypass the machine.
+ * Wall clock: `new Date()` is read HERE, in the router, and handed to the
+ * pure domain explicitly — routers are the only impure layer.
  */
 
-type Ctx = CurvesContext & { user: SafeUser };
+type Ctx = MutationCtx;
 
 const idString = z.string().min(1);
 const prioritySchema = z
@@ -76,18 +77,28 @@ const issueInput = {
   estimate: z.number().int().nullish(),
 };
 
-/** Load (or 404) then authorize on the issue's OWN team — the row, not the request, scopes the check. */
-const loadForMutation = async (
-  ctx: Ctx,
-  repo: IssueRepo,
-  id: ReturnType<typeof issueId>,
-): Promise<Issue> => {
+/** Load (or 404). The row — not the request — scopes the team check. */
+const loadOr404 = async (repo: IssueRepo, id: ReturnType<typeof issueId>): Promise<Issue> => {
   const issue = await repo.byId(id);
   if (issue === null) {
     throw new NotFoundError(`issue ${id} not found`);
   }
-  await assertCanAct(ctx, "update", { teamId: issue.teamId });
   return issue;
+};
+
+/**
+ * The mutation authorize gate: load (or 404), then authorize on the issue's
+ * OWN team. Runs before resolve; resolve re-loads the row itself — the two
+ * stages share no state (two indexed reads per mutation is the price of a
+ * structurally separate authz gate).
+ */
+const authorizeOnIssueTeam = async (
+  ctx: Ctx,
+  repo: IssueRepo,
+  id: ReturnType<typeof issueId>,
+): Promise<void> => {
+  const issue = await loadOr404(repo, id);
+  await assertCanAct(ctx, "update", { teamId: issue.teamId });
 };
 
 const record = async (
@@ -163,9 +174,10 @@ export const issuesRouter = router({
       return repo.relations(input.id);
     }),
 
-  create: mutation(
-    protectedProcedure.input(z.object(issueInput)).mutation(async ({ ctx, input }) => {
-      await assertCanAct(ctx, "create", { teamId: input.teamId });
+  create: mutation({
+    input: z.object(issueInput),
+    authorize: (ctx, input) => assertCanAct(ctx, "create", { teamId: input.teamId }),
+    resolve: async ({ ctx, input }) => {
       const repo = createIssueRepo(ctx.db);
       // Append allocation, same scheme as the seed: after the team's current
       // last order key. nextNumber is NOT needed — repo.create allocates the
@@ -194,165 +206,165 @@ export const issuesRouter = router({
         number: issue.number,
       });
       return issue;
+    },
+  }),
+
+  update: mutation({
+    input: z.object({
+      id: idString.transform(issueId),
+      patch: z.object({
+        title: issueInput.title.optional(),
+        description: z.string().optional(),
+        stateId: issueInput.stateId.optional(),
+        priority: prioritySchema.optional(),
+        estimate: z.number().int().nullable().optional(),
+        assigneeId: issueInput.assigneeId,
+        parentId: idString.transform(issueId).nullable().optional(),
+        projectId: issueInput.projectId,
+        milestoneId: issueInput.milestoneId,
+        cycleId: issueInput.cycleId,
+      }),
     }),
-  ),
+    authorize: (ctx, input) => authorizeOnIssueTeam(ctx, createIssueRepo(ctx.db), input.id),
+    resolve: async ({ ctx, input }) => {
+      const repo = createIssueRepo(ctx.db);
+      const before = await loadOr404(repo, input.id);
+      const patch: IssuePatch = {};
+      const trail: Array<{ verb: ActivityVerb; payload: unknown }> = [];
 
-  update: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          id: idString.transform(issueId),
-          patch: z.object({
-            title: issueInput.title.optional(),
-            description: z.string().optional(),
-            stateId: issueInput.stateId.optional(),
-            priority: prioritySchema.optional(),
-            estimate: z.number().int().nullable().optional(),
-            assigneeId: issueInput.assigneeId,
-            parentId: idString.transform(issueId).nullable().optional(),
-            projectId: issueInput.projectId,
-            milestoneId: issueInput.milestoneId,
-            cycleId: issueInput.cycleId,
-          }),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        const repo = createIssueRepo(ctx.db);
-        const before = await loadForMutation(ctx, repo, input.id);
-        const patch: IssuePatch = {};
-        const trail: Array<{ verb: ActivityVerb; payload: unknown }> = [];
+      /** Copy a defined, actually-changed value into the patch; report whether it changed. */
+      const changed = <T>(
+        key: keyof IssuePatch & keyof Issue,
+        next: T | undefined,
+        current: T,
+      ): boolean => {
+        if (next === undefined || next === current) {
+          return false;
+        }
+        (patch as Record<string, unknown>)[key] = next;
+        return true;
+      };
+      const changedTo = (from: unknown, to: unknown): { from: unknown; to: unknown } => ({
+        from,
+        to,
+      });
 
-        /** Copy a defined, actually-changed value into the patch; report whether it changed. */
-        const changed = <T>(
-          key: keyof IssuePatch & keyof Issue,
-          next: T | undefined,
-          current: T,
-        ): boolean => {
-          if (next === undefined || next === current) {
-            return false;
-          }
-          (patch as Record<string, unknown>)[key] = next;
-          return true;
-        };
-        const changedTo = (from: unknown, to: unknown): { from: unknown; to: unknown } => ({
-          from,
-          to,
+      if (changed("title", input.patch.title, before.title)) {
+        trail.push({
+          verb: "title_changed",
+          payload: changedTo(before.title, input.patch.title),
         });
+      }
+      changed("description", input.patch.description, before.description);
+      const nextStateId = input.patch.stateId;
+      if (nextStateId !== undefined && nextStateId !== before.stateId) {
+        patch.stateId = nextStateId;
+        // Router wall clock — handed to the pure state machine explicitly.
+        Object.assign(patch, await transitionStamps(ctx, before, nextStateId, new Date()));
+        trail.push({
+          verb: "state_changed",
+          payload: changedTo(before.stateId, nextStateId),
+        });
+      }
+      if (changed("priority", input.patch.priority, before.priority)) {
+        trail.push({
+          verb: "priority_changed",
+          payload: changedTo(before.priority, input.patch.priority),
+        });
+      }
+      changed("estimate", input.patch.estimate, before.estimate);
+      if (changed("assigneeId", input.patch.assigneeId, before.assigneeId)) {
+        trail.push({
+          verb: "assignee_changed",
+          payload: changedTo(before.assigneeId, input.patch.assigneeId),
+        });
+      }
+      changed("parentId", input.patch.parentId, before.parentId);
+      if (changed("projectId", input.patch.projectId, before.projectId)) {
+        trail.push({
+          verb: "moved_to_project",
+          payload: changedTo(before.projectId, input.patch.projectId),
+        });
+      }
+      changed("milestoneId", input.patch.milestoneId, before.milestoneId);
+      if (changed("cycleId", input.patch.cycleId, before.cycleId)) {
+        trail.push({
+          verb: "moved_to_cycle",
+          payload: changedTo(before.cycleId, input.patch.cycleId),
+        });
+      }
 
-        if (changed("title", input.patch.title, before.title)) {
-          trail.push({
-            verb: "title_changed",
-            payload: changedTo(before.title, input.patch.title),
-          });
-        }
-        changed("description", input.patch.description, before.description);
-        const nextStateId = input.patch.stateId;
-        if (nextStateId !== undefined && nextStateId !== before.stateId) {
-          patch.stateId = nextStateId;
-          // Router wall clock — handed to the pure state machine explicitly.
-          Object.assign(patch, await transitionStamps(ctx, before, nextStateId, new Date()));
-          trail.push({
-            verb: "state_changed",
-            payload: changedTo(before.stateId, nextStateId),
-          });
-        }
-        if (changed("priority", input.patch.priority, before.priority)) {
-          trail.push({
-            verb: "priority_changed",
-            payload: changedTo(before.priority, input.patch.priority),
-          });
-        }
-        changed("estimate", input.patch.estimate, before.estimate);
-        if (changed("assigneeId", input.patch.assigneeId, before.assigneeId)) {
-          trail.push({
-            verb: "assignee_changed",
-            payload: changedTo(before.assigneeId, input.patch.assigneeId),
-          });
-        }
-        changed("parentId", input.patch.parentId, before.parentId);
-        if (changed("projectId", input.patch.projectId, before.projectId)) {
-          trail.push({
-            verb: "moved_to_project",
-            payload: changedTo(before.projectId, input.patch.projectId),
-          });
-        }
-        changed("milestoneId", input.patch.milestoneId, before.milestoneId);
-        if (changed("cycleId", input.patch.cycleId, before.cycleId)) {
-          trail.push({
-            verb: "moved_to_cycle",
-            payload: changedTo(before.cycleId, input.patch.cycleId),
-          });
-        }
+      const after = await repo.update(input.id, patch);
+      for (const entry of trail) {
+        await record(ctx, entry.verb, after.id, entry.payload);
+      }
+      return after;
+    },
+  }),
 
-        const after = await repo.update(input.id, patch);
-        for (const entry of trail) {
-          await record(ctx, entry.verb, after.id, entry.payload);
-        }
-        return after;
-      }),
-  ),
+  move: mutation({
+    input: z.object({
+      id: idString.transform(issueId),
+      order: idString.transform((s) => s as OrderKey),
+      toStateId: idString.transform(stateId).optional(),
+    }),
+    authorize: (ctx, input) => authorizeOnIssueTeam(ctx, createIssueRepo(ctx.db), input.id),
+    resolve: async ({ ctx, input }) => {
+      const repo = createIssueRepo(ctx.db);
+      const before = await loadOr404(repo, input.id);
+      // A state change goes through the domain state machine first; the
+      // stamped patch persists in the SAME update as the reorder. A move to
+      // the CURRENT state is no state change — no stamps are computed and
+      // no toStateId is passed (the repo guard would refuse it).
+      const toStateId = input.toStateId;
+      const stateChanged = toStateId !== undefined && toStateId !== before.stateId;
+      const stamps = stateChanged
+        ? await transitionStamps(ctx, before, toStateId, new Date())
+        : undefined;
+      const after = await repo.move(
+        input.id,
+        input.order,
+        stateChanged ? input.toStateId : undefined,
+        stamps,
+      );
+      if (stateChanged) {
+        await record(ctx, "state_changed", after.id, { from: before.stateId, to: after.stateId });
+      }
+      return after;
+    },
+  }),
 
-  move: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          id: idString.transform(issueId),
-          order: idString.transform((s) => s as OrderKey),
-          toStateId: idString.transform(stateId).optional(),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        const repo = createIssueRepo(ctx.db);
-        const before = await loadForMutation(ctx, repo, input.id);
-        // A state change goes through the domain state machine first; the
-        // stamped patch persists in the SAME update as the reorder.
-        const stamps =
-          input.toStateId !== undefined && input.toStateId !== before.stateId
-            ? await transitionStamps(ctx, before, input.toStateId, new Date())
-            : undefined;
-        const after = await repo.move(input.id, input.order, input.toStateId, stamps);
-        if (input.toStateId !== undefined && input.toStateId !== before.stateId) {
-          await record(ctx, "state_changed", after.id, { from: before.stateId, to: after.stateId });
-        }
-        return after;
-      }),
-  ),
+  setLabels: mutation({
+    input: z.object({
+      id: idString.transform(issueId),
+      labelIds: z.array(idString.transform(labelId)).max(50),
+    }),
+    authorize: (ctx, input) => authorizeOnIssueTeam(ctx, createIssueRepo(ctx.db), input.id),
+    resolve: async ({ ctx, input }) => {
+      const repo = createIssueRepo(ctx.db);
+      const before = await loadOr404(repo, input.id);
+      const after = await repo.setLabels(input.id, input.labelIds);
 
-  setLabels: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          id: idString.transform(issueId),
-          labelIds: z.array(idString.transform(labelId)).max(50),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        const repo = createIssueRepo(ctx.db);
-        const before = await loadForMutation(ctx, repo, input.id);
-        const after = await repo.setLabels(input.id, input.labelIds);
+      const beforeSet = new Set<string>(before.labelIds);
+      const afterSet = new Set<string>(after.labelIds);
+      for (const id of afterSet) {
+        if (!beforeSet.has(id)) await record(ctx, "label_added", after.id, { labelId: id });
+      }
+      for (const id of beforeSet) {
+        if (!afterSet.has(id)) await record(ctx, "label_removed", after.id, { labelId: id });
+      }
+      return after;
+    },
+  }),
 
-        const beforeSet = new Set<string>(before.labelIds);
-        const afterSet = new Set<string>(after.labelIds);
-        for (const id of afterSet) {
-          if (!beforeSet.has(id)) await record(ctx, "label_added", after.id, { labelId: id });
-        }
-        for (const id of beforeSet) {
-          if (!afterSet.has(id)) await record(ctx, "label_removed", after.id, { labelId: id });
-        }
-        return after;
-      }),
-  ),
-
-  archive: mutation(
-    protectedProcedure
-      .input(z.object({ id: idString.transform(issueId), archived: z.boolean() }))
-      .mutation(async ({ ctx, input }) => {
-        const repo = createIssueRepo(ctx.db);
-        await loadForMutation(ctx, repo, input.id);
-        // no taxonomy verb for (un)archiving — see the file comment
-        return repo.archive(input.id, input.archived ? new Date() : null);
-      }),
-  ),
+  archive: mutation({
+    input: z.object({ id: idString.transform(issueId), archived: z.boolean() }),
+    authorize: (ctx, input) => authorizeOnIssueTeam(ctx, createIssueRepo(ctx.db), input.id),
+    resolve: ({ ctx, input }) => {
+      // no taxonomy verb for (un)archiving — see the file comment
+      return createIssueRepo(ctx.db).archive(input.id, input.archived ? new Date() : null);
+    },
+  }),
 });
 
 /** Registry list: mutation procedure keys in this router (registry-test contract). */

@@ -31,21 +31,17 @@ export const cyclesRouter = router({
       return cycles.map((cycle) => ({ cycle, phase: classifyCycle(cycle, now) }));
     }),
 
-  create: mutation(
-    protectedProcedure
-      .input(
-        z.object({
-          teamId: z.string().min(1).transform(teamId),
-          number: z.number().int().min(1),
-          startsAt: z.coerce.date(),
-          endsAt: z.coerce.date(),
-        }),
-      )
-      .mutation(async ({ ctx, input }) => {
-        await assertCanAct(ctx, "manage_workflow", { teamId: input.teamId });
-        return createCycleRepo(ctx.db).create(input);
-      }),
-  ),
+  create: mutation({
+    input: z.object({
+      teamId: z.string().min(1).transform(teamId),
+      number: z.number().int().min(1),
+      startsAt: z.coerce.date(),
+      endsAt: z.coerce.date(),
+    }),
+    // Workflow-shaping act: team admin only (manage_workflow).
+    authorize: (ctx, input) => assertCanAct(ctx, "manage_workflow", { teamId: input.teamId }),
+    resolve: ({ ctx, input }) => createCycleRepo(ctx.db).create(input),
+  }),
 });
 
 /** Registry list: mutation procedure keys in this router (registry-test contract). */

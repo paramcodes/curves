@@ -1,8 +1,19 @@
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { ValidationError } from "@curves/domain/core/errors";
+import { userId } from "@curves/domain/core/ids";
 import type { AnyMutationProcedure } from "@trpc/server";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { appRouter } from "../root";
-import { MUTATION_TAG, mutation, protectedProcedure, type TaggedMutation } from "../trpc/trpc";
+import {
+  createCallerFactory,
+  MUTATION_TAG,
+  mutation,
+  protectedProcedure,
+  router,
+} from "../trpc/trpc";
 import { mutations as commentsMutations, commentsRouter } from "./comments";
 import { mutations as cyclesMutations, cyclesRouter } from "./cycles";
 import { mutations as healthMutations, healthRouter } from "./health";
@@ -161,17 +172,68 @@ describe("mutation registry", () => {
     expect(problems).toEqual([]);
   });
 
-  it("mutation() tags the procedure; raw .mutation() results stay untagged (mechanism proof)", () => {
-    const build = (): AnyMutationProcedure =>
+  it("mutation({input, authorize, resolve}) runs authorize BEFORE resolve, inside the procedure (structural proof)", async () => {
+    const order: string[] = [];
+    const probe = router({
+      touch: mutation({
+        input: z.object({ value: z.string() }),
+        authorize: (ctx, input) => {
+          order.push(`authorize:${ctx.user.id}`);
+          if (input.value === "deny") {
+            throw new ValidationError("not allowed");
+          }
+        },
+        resolve: async ({ input }) => {
+          order.push("resolve");
+          return input.value;
+        },
+      }),
+    });
+    const caller = createCallerFactory(probe)({
+      db: {} as never,
+      auth: {} as never,
+      session: {} as never,
+      user: { id: userId("user_probe"), name: "Probe", email: "probe@curves.dev", avatarUrl: null },
+    });
+
+    await expect(caller.touch({ value: "ok" })).resolves.toBe("ok");
+    // a rejection from authorize never reaches resolve
+    await expect(caller.touch({ value: "deny" })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "not allowed",
+    });
+    // two authorize runs, exactly one resolve — the gate is structural
+    expect(order).toEqual(["authorize:user_probe", "resolve", "authorize:user_probe"]);
+  });
+
+  it("mutation() tags the procedure; a raw builder call stays untagged (mechanism proof)", () => {
+    const raw = (): AnyMutationProcedure =>
       protectedProcedure
         .input(z.object({ value: z.string() }))
         .mutation(async ({ input }) => input.value);
 
-    const tagged: AnyMutationProcedure & TaggedMutation = mutation(build());
+    const tagged = mutation({
+      input: z.object({ value: z.string() }),
+      authorize: () => {},
+      resolve: async ({ input }) => input.value,
+    });
     expect(isTagged(tagged)).toBe(true);
     expect(tagged._def.type).toBe("mutation");
-    expect(mutation(tagged)).toBe(tagged);
 
-    expect(isTagged(build())).toBe(false);
+    expect(isTagged(raw())).toBe(false);
+  });
+
+  it("no router source calls the raw .mutation( builder — mutation({...}) is the only shape (strike-2 scan)", async () => {
+    const dir = fileURLToPath(new URL(".", import.meta.url));
+    const files = (await readdir(dir)).filter(
+      (file) => file.endsWith(".ts") && !file.endsWith(".test.ts"),
+    );
+    expect(files.length).toBeGreaterThanOrEqual(12);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = await readFile(join(dir, file), "utf8");
+      if (source.includes(".mutation(")) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
   });
 });

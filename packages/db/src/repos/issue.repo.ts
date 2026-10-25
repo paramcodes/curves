@@ -211,6 +211,28 @@ const patchToSet = (patch: IssuePatch): Partial<typeof issues.$inferInsert> => {
 };
 
 /**
+ * S5 guard (phase-2 review): a state change MUST arrive with the full
+ * applyTransition stamp set — a bare {stateId} patch (or a move with a
+ * toStateId but no stamps) has not gone through the domain state machine, so
+ * lifecycle dates would silently go unstamped. The repo cannot compute the
+ * stamps itself (persistence boundary: no wall clock, no transition policy),
+ * so it refuses instead: ValidationError → BAD_REQUEST at the API, and the
+ * contract suite pins the refusal.
+ */
+const assertStampsRouted = (patch: IssuePatch): void => {
+  const complete =
+    patch.startedAt !== undefined &&
+    patch.completedAt !== undefined &&
+    patch.canceledAt !== undefined;
+  if (patch.stateId !== undefined && !complete) {
+    throw new ValidationError(
+      "issue repo refuses a state change without the applyTransition stamp set " +
+        "(startedAt/completedAt/canceledAt) — route state changes through the domain state machine",
+    );
+  }
+};
+
+/**
  * The team's highest issue order key (numeric max over the double-precision
  * serialization — a plain SQL max() over the text column would compare
  * lexically), or null when the team has no issues. The create path's
@@ -409,11 +431,22 @@ export const createIssueRepo = (db: Db): IssueRepo => {
       }
     },
 
-    update: async (id, patch) => updateReturning(patchToSet(patch), id),
+    update: async (id, patch) => {
+      assertStampsRouted(patch);
+      return updateReturning(patchToSet(patch), id);
+    },
 
     move: async (id, order, toStateId, stamps) => {
       // validates the key is a finite number serialization
       orderKeyNumber(order);
+      if (toStateId !== undefined && stamps === undefined) {
+        // S5 guard: see assertStampsRouted — a state change without the
+        // applyTransition stamps never entered the domain state machine
+        throw new ValidationError(
+          "issue repo refuses move-to-state without the applyTransition stamp set — " +
+            "route state changes through the domain state machine",
+        );
+      }
       const set: Partial<typeof issues.$inferInsert> = {
         order,
         updatedAt: stamps?.updatedAt ?? new Date(),

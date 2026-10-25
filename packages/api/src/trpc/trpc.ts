@@ -1,6 +1,7 @@
 import { DomainError } from "@curves/domain/core/errors";
-import { type AnyMutationProcedure, initTRPC, TRPCError } from "@trpc/server";
-import type { CurvesContext } from "./context";
+import { initTRPC, TRPCError } from "@trpc/server";
+import type { z } from "zod";
+import type { AuthSession, CurvesContext, SafeUser } from "./context";
 import { mapDomainError } from "./errors";
 
 const t = initTRPC.context<CurvesContext>().create();
@@ -53,13 +54,25 @@ export const router = t.router;
 export const createCallerFactory = t.createCallerFactory;
 
 /**
- * Mutation-registry discipline: `mutation(...)` is the ONLY sanctioned way to
- * build a mutation procedure. It tags the built procedure with a symbol, and
- * the registry test (src/routers/registry.test.ts) walks every assembled
- * router and fails on any mutation the tag is missing from — so a raw
- * `.mutation()` call that bypasses the helper cannot ship. Routers must also
- * list their mutation keys in an exported `mutations` array; the registry
- * test cross-checks both directions.
+ * Mutation-registry discipline: `mutation(...)` is the ONLY sanctioned shape
+ * for a mutation procedure, and the registry test (src/routers/registry.test.ts)
+ * enforces it three ways: it walks every assembled router and fails on any
+ * mutation missing the tag, it cross-checks each router's exported `mutations`
+ * list, and it scans the router SOURCES for a raw `.mutation(` builder call
+ * that would bypass this helper (strike-2 hardening).
+ *
+ * `authorize` is REQUIRED and runs structurally BEFORE `resolve`, after the
+ * input parses, inside the same procedure — so a mutation whose authorization
+ * decision is implicit cannot be expressed, and DomainErrors the gate throws
+ * map through the one table in errors.ts. Most gates are a single assertCanAct
+ * call; mutations whose authz lives in a repo-level ownership guard
+ * (notifications' per-user markRead) pass a function that documents that and
+ * returns.
+ *
+ * `input` takes the zod schema — `z.void()` for input-less mutations. Keeping
+ * the shape uniform (no optional-input branch) lets the helper be one
+ * non-branching build whose inferred procedure type preserves input/output
+ * types for every caller.
  */
 export const MUTATION_TAG: unique symbol = Symbol("curves.mutation");
 
@@ -67,14 +80,37 @@ export interface TaggedMutation {
   readonly [MUTATION_TAG]: true;
 }
 
-export const mutation = <TProcedure extends AnyMutationProcedure>(
-  procedure: TProcedure,
-): TProcedure & TaggedMutation => {
-  if (MUTATION_TAG in procedure) return procedure as TProcedure & TaggedMutation;
-  Object.defineProperty(procedure, MUTATION_TAG, {
+/** The narrowed context mutation callbacks receive (requireUser has run). */
+export type MutationCtx = CurvesContext & { user: SafeUser; session: AuthSession };
+
+type ParsedInput<TIn extends z.ZodTypeAny> = z.output<TIn>;
+
+export interface MutationConfig<TIn extends z.ZodTypeAny, TResult> {
+  /** The zod input schema; `z.void()` for input-less mutations. */
+  input: TIn;
+  /**
+   * THE authz gate — runs before resolve, after input parse. Must be an
+   * explicit authorization decision (usually assertCanAct) or a documented
+   * delegation to a repo-level ownership guard.
+   */
+  authorize: (ctx: MutationCtx, input: ParsedInput<TIn>) => Promise<void> | void;
+  /** The resolver; `authorize` has already run when this is called. */
+  resolve: (opts: { ctx: MutationCtx; input: ParsedInput<TIn> }) => Promise<TResult>;
+}
+
+export const mutation = <TIn extends z.ZodTypeAny, TResult>(
+  config: MutationConfig<TIn, TResult>,
+) => {
+  const procedure = protectedProcedure.input(config.input).mutation(async ({ ctx, input }) => {
+    const parsed = input as ParsedInput<TIn>;
+    await config.authorize(ctx, parsed);
+    return config.resolve({ ctx, input: parsed });
+  });
+  // tRPC builder procedures are objects; the non-enumerable tag survives
+  // router assembly (the registry test reflects on it).
+  return Object.defineProperty(procedure, MUTATION_TAG, {
     value: true,
     enumerable: false,
     writable: false,
   });
-  return procedure as TProcedure & TaggedMutation;
 };

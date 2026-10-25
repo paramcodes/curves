@@ -780,9 +780,26 @@ export const issueRepoContract = (makeRepo: () => Promise<IssueRepoContractCtx>)
         expect(moved.order).toBe("42.5");
         expect(moved.stateId).toBe(stReady);
 
-        const movedWithState = await repo.move(issueId("issue_1"), orderKey(43), stDone);
+        // with a state change, stamps are REQUIRED (the applyTransition output)
+        const movedWithState = await repo.move(issueId("issue_1"), orderKey(43), stDone, {
+          startedAt: at(10 * minute),
+          completedAt: at(43 * minute),
+          canceledAt: null,
+          updatedAt: at(43 * minute),
+        });
         expect(movedWithState.order).toBe("43");
         expect(movedWithState.stateId).toBe(stDone);
+        expect(movedWithState.completedAt).toEqual(at(43 * minute));
+
+        // S5 guard: a state change that has NOT been through the domain state
+        // machine (no stamp set) is refused — ValidationError, never a silent
+        // unstamped write
+        await expect(repo.move(issueId("issue_1"), orderKey(44), stDoing)).rejects.toThrowError(
+          ValidationError,
+        );
+        await expect(repo.update(issueId("issue_1"), { stateId: stDoing })).rejects.toThrowError(
+          ValidationError,
+        );
 
         await expect(repo.move(issueId("issue_missing"), orderKey(1))).rejects.toThrowError(
           /not found/,

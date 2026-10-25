@@ -310,6 +310,115 @@ describe("views (owner-scoped)", () => {
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
+
+  it("TEAM-BINDING authz: a non-member cannot attach views to a team they do not belong to (the review's IDOR repro)", async () => {
+    const { outsider } = await memberAndOutsider();
+    const outsiderCaller = callerFor(outsider.context);
+
+    // the exact review repro: a signed-in outsider creates a team view for a
+    // team they are not a member of — refused by the authorize gate
+    await expect(
+      outsiderCaller.views.create({
+        name: "Hostile",
+        teamId: TEAM,
+        filter: teamFilter,
+        display,
+        isTeamDefault: true,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /not a member/i });
+    // nothing leaked into the team's shared surface
+    await expect(outsiderCaller.views.byTeam({ teamId: TEAM })).resolves.toEqual([]);
+  });
+
+  it("TEAM-BINDING authz: an outsider cannot promote their personal view into another team's default; the team admin can", async () => {
+    const { member, outsider } = await memberAndOutsider();
+    const outsiderCaller = callerFor(outsider.context);
+    // personal view — creating it needs no team role (owner-scoped)
+    const personal = await outsiderCaller.views.create({
+      name: "Mine",
+      filter: teamFilter,
+      display,
+    });
+
+    // binding it into TEAM's surface requires manage_views on TEAM
+    await expect(
+      outsiderCaller.views.update({
+        id: personal.id,
+        patch: { teamId: TEAM, isTeamDefault: true },
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /not a member/i });
+    // the failed attempt changed nothing
+    await expect(outsiderCaller.views.my()).resolves.toEqual([
+      expect.objectContaining({ id: personal.id, teamId: null, isTeamDefault: false }),
+    ]);
+
+    // the admin of TEAM CAN bind another owner's... no — ownership still
+    // gates: the OUTSIDER owns the view, so even the team admin gets NOT_FOUND
+    await expect(
+      callerFor(member.context).views.update({
+        id: personal.id,
+        patch: { teamId: TEAM, isTeamDefault: true },
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    // and the owner (who is not a member) still cannot bind it — the two
+    // gates are cumulative: owner AND team admin, for team-attached views
+
+    // the ALLOWED path: the team admin binds their OWN personal view —
+    // ownership and role gates both clear
+    const adminView = await callerFor(member.context).views.create({
+      name: "Admin's own",
+      filter: teamFilter,
+      display,
+    });
+    await expect(
+      callerFor(member.context).views.update({
+        id: adminView.id,
+        patch: { teamId: TEAM, isTeamDefault: true },
+      }),
+    ).resolves.toMatchObject({ teamId: TEAM, isTeamDefault: true });
+    await expect(callerFor(member.context).views.byTeam({ teamId: TEAM })).resolves.toEqual([
+      expect.objectContaining({ id: adminView.id, isTeamDefault: true }),
+    ]);
+  });
+
+  it("TEAM-BINDING authz: a plain member (non-admin) is refused manage_views; owner and role gates are cumulative", async () => {
+    const { member, outsider } = await memberAndOutsider();
+    const plain = await createTestContext(shared.db, curves);
+    await shared.db
+      .insert(teamMembers)
+      .values({ teamId: TEAM, userId: plain.user.id, role: "member" });
+
+    // the team ADMIN binds their own view into the team — the allowed path
+    const adminView = await callerFor(member.context).views.create({
+      name: "Admin's team view",
+      teamId: TEAM,
+      filter: teamFilter,
+      display,
+    });
+    await expect(callerFor(member.context).views.byTeam({ teamId: TEAM })).resolves.toEqual([
+      adminView,
+    ]);
+
+    // a plain member owns a personal view; binding it is refused (role gate)
+    const ownView = await callerFor(plain.context).views.create({
+      name: "Member's own",
+      filter: teamFilter,
+      display,
+    });
+    await expect(
+      callerFor(plain.context).views.update({
+        id: ownView.id,
+        patch: { teamId: TEAM, isTeamDefault: true },
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /team admin role/i });
+    // and even the team admin cannot touch the plain member's view —
+    // ownership gates first (NOT_FOUND), role second
+    await expect(
+      callerFor(member.context).views.update({ id: ownView.id, patch: { name: "hijack" } }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    // the outsider saw none of this
+    await expect(callerFor(outsider.context).views.my()).resolves.toEqual([]);
+  });
 });
 
 describe("notifications (strictly per-user)", () => {
