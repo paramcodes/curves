@@ -1,8 +1,14 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "typecheck": {},
-    "test": {},
-    "test:integration": {}
+    "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "../../packages/*/src/**", "../../packages/*/package.json"]
+    },
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "../../packages/*/src/**", "../../packages/*/package.json"]
+    },
+    "test:integration": {
+      "inputs": ["$TURBO_DEFAULT$", "../../packages/*/src/**", "../../packages/*/package.json"]
+    }
   }
 }
